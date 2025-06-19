@@ -6,8 +6,11 @@
 	"search.exclude": {
 		"out": true // set this to false to include "out" folder in search results
 	},
+	"typescript.enablePromptUseWorkspaceTsdk": true,
+	"typescript.preferences.preferTypeOnlyAutoImports": true,
 	// Turn off tsc task auto detection since we have the necessary tasks as npm scripts
 	"typescript.tsc.autoDetect": "off",
+	"typescript.updateImportsOnPaste.enabled": true
 }
 
 	"eslint.format.enable": true,
