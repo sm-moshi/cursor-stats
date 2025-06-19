@@ -2,7 +2,7 @@
   "name": "cursor-stats",
   "displayName": "Cursor Stats",
   "description": "A Cursor extension for monitoring usage.",
-  "version": "1.1.4",
+  "version": "1.1.5-dev.1",
   "publisher": "Dwtexe",
   "icon": "images/icon.png",
   "repository": {
@@ -359,32 +359,32 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./ && npm run copy-locales",
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "tsc -p ./ && pnpm run copy-locales",
     "copy-locales": "node -e \"const fs=require('fs'),path=require('path'); const src='src/locales',dest='out/locales'; if(fs.existsSync(src)){fs.mkdirSync(dest,{recursive:true}); fs.readdirSync(src).forEach(file=>fs.copyFileSync(path.join(src,file),path.join(dest,file))); console.log('Locales copied to out/locales');}\"",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "pretest": "pnpm run compile && pnpm run lint",
     "lint": "eslint src --ext ts",
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/jsonwebtoken": "9.0.9",
+    "@types/jsonwebtoken": "9.0.10",
     "@types/mocha": "10.0.10",
-    "@types/node": "22.15.20",
+    "@types/node": "22.15.32",
     "@types/semver": "7.7.0",
+    "@types/sql.js": "1.4.9",
     "@types/vscode": "1.96.0",
-    "@typescript-eslint/eslint-plugin": "8.32.1",
-    "@typescript-eslint/parser": "8.32.1",
-    "@vscode/test-cli": "^0.0.10",
-    "eslint": "9.27.0",
-    "typescript": "5.8.3",
-    "@types/sql.js": "1.4.9"
+    "@typescript-eslint/eslint-plugin": "8.34.1",
+    "@typescript-eslint/parser": "8.34.1",
+    "@vscode/test-cli": "0.0.11",
+    "eslint": "9.29.0",
+    "typescript": "5.8.3"
   },
   "dependencies": {
-    "axios": "1.9.0",
-    "glob": "^11.0.2",
-    "jsonwebtoken": "^9.0.2",
-    "lru-cache": "^11.1.0",
+    "axios": "1.10.0",
+    "glob": "11.0.3",
+    "jsonwebtoken": "9.0.2",
+    "lru-cache": "11.1.0",
     "marked": "15.0.12",
     "semver": "7.7.2",
     "sql.js": "1.13.0"
