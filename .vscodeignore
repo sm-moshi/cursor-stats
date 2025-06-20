@@ -23,6 +23,7 @@ package-lock.json
 **/*.spec.js
 **/.npmignore
 scripts/**
+**/*.js.map
 
 # Node modules to exclude (keeping only necessary ones)
 node_modules/sql.js/**
