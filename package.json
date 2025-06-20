@@ -364,7 +364,9 @@
 		"copy-locales": "node -e \"const fs=require('fs'),path=require('path'); const src='src/locales',dest='out/locales'; if(fs.existsSync(src)){fs.mkdirSync(dest,{recursive:true}); fs.readdirSync(src).forEach(file=>fs.copyFileSync(path.join(src,file),path.join(dest,file))); console.log('Locales copied to out/locales');}\"",
 		"watch": "tsc -watch -p ./",
 		"pretest": "pnpm run compile && pnpm run lint",
-		"lint": "eslint src --ext ts",
+		"lint": "biome lint .",
+		"format": "biome format .",
+		"check": "biome check .",
 		"test": "vscode-test"
 	},
 	"devDependencies": {
@@ -375,6 +377,7 @@
 		"@types/semver": "7.7.0",
 		"@types/sql.js": "1.4.9",
 		"@types/vscode": "1.96.0",
+		"@typescript/native-preview": "7.0.0-dev.20250619.1",
 		"@vscode/test-cli": "0.0.11",
 		"@vscode/test-electron": "^2.5.2",
 		"typescript": "5.8.3"
