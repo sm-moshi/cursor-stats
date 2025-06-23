@@ -1,11 +1,11 @@
 import axios from "axios";
-import * as semver from "semver";
-import type { GitHubRelease, ReleaseCheckResult } from "../interfaces/types";
-import { log } from "../utils/logger";
-import * as vscode from "vscode";
 import { marked } from "marked";
+import * as semver from "semver";
+import * as vscode from "vscode";
 import { getExtensionContext } from "../extension";
+import type { GitHubRelease, ReleaseCheckResult } from "../interfaces/types";
 import { t } from "../utils/i18n";
+import { log } from "../utils/logger";
 
 const SHOWN_CHANGELOGS_KEY = "shownChangelogs";
 

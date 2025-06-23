@@ -1,8 +1,8 @@
 import * as vscode from "vscode";
-import { log } from "../utils/logger";
-import { convertAndFormatCurrency } from "../utils/currency";
 import type { UsageInfo } from "../interfaces/types";
+import { convertAndFormatCurrency } from "../utils/currency";
 import { t } from "../utils/i18n";
+import { log } from "../utils/logger";
 
 // Track which thresholds have been notified in the current session
 const notifiedPremiumThresholds = new Set<number>();
@@ -124,12 +124,20 @@ export async function checkAndNotifyUnpaidInvoice(token: string) {
 				const stripeUrl = await getStripeSessionUrl(token);
 				vscode.env.openExternal(vscode.Uri.parse(stripeUrl));
 			} catch (error) {
-				log("[Notifications] Failed to get Stripe URL, falling back to settings page.", true);
+				log(
+					`[Notifications] Failed to get Stripe URL: ${error instanceof Error ? error.message : String(error)}, falling back to settings page.`,
+					true,
+				);
 				vscode.env.openExternal(vscode.Uri.parse("https://www.cursor.com/settings"));
 			}
 		}
 		unpaidInvoiceNotifiedThisSession = true;
 		log("[Notifications] Unpaid invoice notification shown.");
+	} catch (error) {
+		log(
+			`[Notifications] Error during checkAndNotifyUnpaidInvoice: ${error instanceof Error ? error.message : String(error)}`,
+			true,
+		);
 	} finally {
 		isNotificationInProgress = false;
 	}
@@ -187,15 +195,21 @@ export async function checkAndNotifyUsage(usageInfo: UsageInfo) {
 				detail = t("notifications.manageLimitDetail");
 			}
 
+			// Determine the appropriate action button text based on usage type and percentage
+			let actionButtonText: string;
+			if (type === "premium" && percentage > 100) {
+				actionButtonText = t("notifications.enableUsageBasedTitle");
+			} else if (type === "premium") {
+				actionButtonText = t("notifications.viewSettingsTitle");
+			} else {
+				actionButtonText = t("notifications.manageLimitTitle");
+			}
+
 			// Show the notification
 			const notification = await vscode.window.showWarningMessage(
 				message,
 				{ modal: false, detail },
-				type === "premium" && percentage > 100
-					? t("notifications.enableUsageBasedTitle")
-					: type === "premium"
-						? t("notifications.viewSettingsTitle")
-						: t("notifications.manageLimitTitle"),
+				actionButtonText,
 				t("notifications.dismiss"),
 			);
 
@@ -203,7 +217,10 @@ export async function checkAndNotifyUsage(usageInfo: UsageInfo) {
 				try {
 					await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:Dwtexe.cursor-stats");
 				} catch (error) {
-					log("[Notifications] Failed to open settings directly, trying alternative method...", true);
+					log(
+						`[Notifications] Failed to open settings directly: ${error instanceof Error ? error.message : String(error)}, trying alternative method...`,
+						true,
+					);
 					try {
 						await vscode.commands.executeCommand("workbench.action.openSettings");
 						await vscode.commands.executeCommand("workbench.action.search.toggleQueryDetails");
@@ -212,7 +229,10 @@ export async function checkAndNotifyUsage(usageInfo: UsageInfo) {
 							"@ext:Dwtexe.cursor-stats",
 						);
 					} catch (fallbackError) {
-						log("[Notifications] Failed to open settings with fallback method", true);
+						log(
+							`[Notifications] Failed to open settings with fallback method: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+							true,
+						);
 						vscode.window.showErrorMessage(t("notifications.failedToOpenSettings"));
 					}
 				}
@@ -238,6 +258,11 @@ export async function checkAndNotifyUsage(usageInfo: UsageInfo) {
 				log(`[Notifications] Cleared notification for threshold ${threshold}% as ${type} usage dropped below it`);
 			}
 		}
+	} catch (error) {
+		log(
+			`[Notifications] Error during checkAndNotifyUsage: ${error instanceof Error ? error.message : String(error)}`,
+			true,
+		);
 	} finally {
 		isNotificationInProgress = false;
 	}

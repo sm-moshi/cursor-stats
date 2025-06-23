@@ -1,15 +1,15 @@
-import * as vscode from "vscode";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
 import axios from "axios";
+import * as vscode from "vscode";
+import { getExtensionContext } from "../extension";
 import type { CursorReport, CursorUsageResponse } from "../interfaces/types";
 import { fetchCursorStats, getCurrentUsageLimit } from "../services/api";
 import { getCursorTokenFromDB } from "../services/database";
-import { log, getLogHistory } from "./logger";
-import { getTeamUsage, checkTeamMembership } from "../services/team";
-import { getExtensionContext } from "../extension";
+import { checkTeamMembership, getTeamUsage } from "../services/team";
 import { t } from "./i18n";
+import { getLogHistory, log } from "./logger";
 
 /**
  * Generates a comprehensive report of the extension's data and API responses
@@ -157,8 +157,6 @@ export async function generateReport(): Promise<{ reportPath: string; success: b
 				)
 				.then((response) => {
 					if (!report.rawResponses.monthlyInvoice) {
-						report.rawResponses.monthlyInvoice = {};
-					}
 					report.rawResponses.monthlyInvoice.current = response.data;
 					log("[Report] Successfully fetched current month invoice data");
 				})
@@ -184,8 +182,6 @@ export async function generateReport(): Promise<{ reportPath: string; success: b
 				)
 				.then((response) => {
 					if (!report.rawResponses.monthlyInvoice) {
-						report.rawResponses.monthlyInvoice = {};
-					}
 					report.rawResponses.monthlyInvoice.last = response.data;
 					log("[Report] Successfully fetched last month invoice data");
 				})

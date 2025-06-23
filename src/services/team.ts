@@ -1,9 +1,9 @@
-import type * as vscode from "vscode";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import axios from "axios";
 import * as jwt from "jsonwebtoken";
-import type { TeamInfo, TeamMemberInfo, TeamUsageResponse, UserCache, CursorUsageResponse } from "../interfaces/types";
+import type * as vscode from "vscode";
+import type { CursorUsageResponse, TeamInfo, TeamMemberInfo, TeamUsageResponse, UserCache } from "../interfaces/types";
 import { log } from "../utils/logger";
 
 const CACHE_FILE_NAME = "user-cache.json";

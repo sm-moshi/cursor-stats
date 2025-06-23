@@ -1,25 +1,25 @@
-import { log } from "./logger";
-import { getCursorTokenFromDB } from "../services/database";
-import { checkUsageBasedStatus, fetchCursorStats } from "../services/api";
-import { checkAndNotifyUsage, checkAndNotifySpending, checkAndNotifyUnpaidInvoice } from "../handlers/notifications";
-import {
-	startRefreshInterval,
-	getCooldownStartTime,
-	getConsecutiveErrorCount,
-	incrementConsecutiveErrorCount,
-	setCooldownStartTime,
-	resetConsecutiveErrorCount,
-} from "./cooldown";
+import * as vscode from "vscode";
+import { checkAndNotifySpending, checkAndNotifyUnpaidInvoice, checkAndNotifyUsage } from "../handlers/notifications";
 import {
 	createMarkdownTooltip,
+	createSeparator,
 	formatTooltipLine,
 	getMaxLineWidth,
 	getStatusBarColor,
-	createSeparator,
 } from "../handlers/statusBar";
-import * as vscode from "vscode";
+import { checkUsageBasedStatus, fetchCursorStats } from "../services/api";
+import { getCursorTokenFromDB } from "../services/database";
+import {
+	getConsecutiveErrorCount,
+	getCooldownStartTime,
+	incrementConsecutiveErrorCount,
+	resetConsecutiveErrorCount,
+	setCooldownStartTime,
+	startRefreshInterval,
+} from "./cooldown";
 import { convertAndFormatCurrency, getCurrentCurrency } from "./currency";
 import { t } from "./i18n";
+import { log } from "./logger";
 
 // Track unknown models to avoid repeated notifications
 let unknownModelNotificationShown = false;

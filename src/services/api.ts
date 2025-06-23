@@ -1,16 +1,16 @@
+import * as fs from "node:fs";
 import axios from "axios";
+import { getExtensionContext } from "../extension";
 import type {
 	CursorStats,
-	UsageLimitResponse,
+	CursorUsageResponse,
 	ExtendedAxiosError,
 	UsageItem,
-	CursorUsageResponse,
+	UsageLimitResponse,
 } from "../interfaces/types";
-import { log } from "../utils/logger";
-import { checkTeamMembership, getTeamUsage, extractUserUsage } from "./team";
-import { getExtensionContext } from "../extension";
 import { t } from "../utils/i18n";
-import * as fs from "node:fs";
+import { log } from "../utils/logger";
+import { checkTeamMembership, extractUserUsage, getTeamUsage } from "./team";
 
 export async function getCurrentUsageLimit(token: string): Promise<UsageLimitResponse> {
 	try {
@@ -25,7 +25,7 @@ export async function getCurrentUsageLimit(token: string): Promise<UsageLimitRes
 		);
 		return response.data;
 	} catch (error: any) {
-		log("[API] Error fetching usage limit: " + error.message, true);
+		log(`[API] Error fetching usage limit: ${error.message}`, true);
 		throw error;
 	}
 }
@@ -48,7 +48,7 @@ export async function setUsageLimit(token: string, hardLimit: number, noUsageBas
 			`[API] Successfully ${noUsageBasedAllowed ? "disabled" : "enabled"} usage-based pricing with limit: $${hardLimit}`,
 		);
 	} catch (error: any) {
-		log("[API] Error setting usage limit: " + error.message, true);
+		log(`[API] Error setting usage limit: ${error.message}`, true);
 		throw error;
 	}
 }
@@ -86,7 +86,7 @@ async function fetchMonthData(
 				response = { data: JSON.parse(rawData) };
 				log("[API] Successfully loaded dev data");
 			} catch (devError: any) {
-				log("[API] Error reading dev data: " + devError.message, true);
+				log(`[API] Error reading dev data: ${devError.message}`, true);
 				throw devError;
 			}
 		} else {
@@ -179,7 +179,7 @@ async function fetchMonthData(
 			for (const item of response.data.items) {
 				// Skip items without cents value
 				if (!Object.hasOwn(item, "cents")) {
-					log("[API] Skipping item without cents value: " + item.description);
+					log(`[API] Skipping item without cents value: ${item.description}`);
 					continue;
 				}
 
@@ -207,7 +207,7 @@ async function fetchMonthData(
 				const cents = item.cents;
 
 				if (typeof cents === "undefined") {
-					log("[API] Skipping item with undefined cents value: " + item.description);
+					log(`[API] Skipping item with undefined cents value: ${item.description}`);
 					continue;
 				}
 
@@ -253,7 +253,7 @@ async function fetchMonthData(
 							);
 						}
 					} else {
-						log("[API] Could not extract request count or model info from: " + item.description);
+						log(`[API] Could not extract request count or model info from: ${item.description}`);
 						parsedModelName = t("statusBar.unknownModel"); // Ensure it's set for items we can't parse fully
 						// Try to get at least a request count if possible, even if model is unknown
 						const fallbackCountMatch = item.description.match(/^(\d+)/);
@@ -267,7 +267,7 @@ async function fetchMonthData(
 
 				// Skip items with 0 requests to avoid division by zero
 				if (requestCount === 0) {
-					log("[API] Skipping item with 0 requests: " + item.description);
+					log(`[API] Skipping item with 0 requests: ${item.description}`);
 					continue;
 				}
 
@@ -388,7 +388,7 @@ export async function fetchCursorStats(token: string): Promise<CursorStats> {
 			premiumRequests,
 		};
 	} catch (error: any) {
-		log("[API] Error fetching premium requests: " + error, true);
+		log(`[API] Error fetching premium requests: ${error}`, true);
 		log(
 			"[API] API error details: " +
 				JSON.stringify({
@@ -412,7 +412,7 @@ export async function getStripeSessionUrl(token: string): Promise<string> {
 		// Remove quotes from the response string
 		return response.data.replace(/"/g, "");
 	} catch (error: any) {
-		log("[API] Error getting Stripe session URL: " + error.message, true);
+		log(`[API] Error getting Stripe session URL: ${error.message}`, true);
 		throw error;
 	}
 }

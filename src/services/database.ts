@@ -1,10 +1,10 @@
+import { execSync } from "node:child_process";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import * as jwt from "jsonwebtoken";
-import * as vscode from "vscode";
-import * as fs from "node:fs";
 import initSqlJs from "sql.js";
+import * as vscode from "vscode";
 import { log } from "../utils/logger";
-import { execSync } from "node:child_process";
 
 // use globalStorageUri to get the user directory path
 // support Portable mode : https://code.visualstudio.com/docs/editor/portable
@@ -83,13 +83,13 @@ export async function getCursorTokenFromDB(): Promise<string | undefined> {
 		try {
 			const decoded = jwt.decode(token, { complete: true });
 
-			if (!decoded || !decoded.payload || !decoded.payload.sub) {
+			if (!decoded || typeof decoded.payload === "string" || !decoded.payload.sub) {
 				log(`[Database] Invalid JWT structure: ${JSON.stringify({ decoded })}`, true);
 				db.close();
 				return undefined;
 			}
 
-			const sub = decoded.payload.sub.toString();
+			const sub = decoded.payload.sub;
 			const userId = sub.split("|")[1];
 			const sessionToken = `${userId}%3A%3A${token}`;
 			log(`[Database] Created session token, length: ${sessionToken.length}`);

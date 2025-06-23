@@ -1,10 +1,10 @@
-import * as vscode from "vscode";
-import axios from "axios";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { log } from "./logger";
-import type { CurrencyRates, CurrencyCache } from "../interfaces/types";
+import axios from "axios";
+import * as vscode from "vscode";
 import { getExtensionContext } from "../extension";
+import type { CurrencyCache, CurrencyRates } from "../interfaces/types";
+import { log } from "./logger";
 
 const CURRENCY_API_URL = "https://latest.currency-api.pages.dev/v1/currencies/usd.json";
 const CURRENCY_CACHE_FILE = "currency-rates.json";

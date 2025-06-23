@@ -1,22 +1,22 @@
 import * as vscode from "vscode";
-import { checkForUpdates } from "./services/github";
-import { createStatusBarItem } from "./handlers/statusBar";
-import { initializeLogging, log } from "./utils/logger";
-import { getCursorTokenFromDB } from "./services/database";
-import { checkUsageBasedStatus, getCurrentUsageLimit, setUsageLimit } from "./services/api";
 import { resetNotifications } from "./handlers/notifications";
+import { createStatusBarItem } from "./handlers/statusBar";
+import { checkUsageBasedStatus, getCurrentUsageLimit, setUsageLimit } from "./services/api";
+import { getCursorTokenFromDB } from "./services/database";
+import { checkForUpdates } from "./services/github";
 import {
-	startRefreshInterval,
-	setStatusBarItem,
-	setIsWindowFocused,
 	clearAllIntervals,
 	getCooldownStartTime,
+	setIsWindowFocused,
+	setStatusBarItem,
 	startCountdownDisplay,
+	startRefreshInterval,
 } from "./utils/cooldown";
-import { updateStats } from "./utils/updateStats";
-import { SUPPORTED_CURRENCIES, convertAndFormatCurrency } from "./utils/currency";
+import { convertAndFormatCurrency, SUPPORTED_CURRENCIES } from "./utils/currency";
+import { initializeI18n, setOnLanguageChangeCallback, t } from "./utils/i18n";
+import { initializeLogging, log } from "./utils/logger";
 import { createReportCommand } from "./utils/report";
-import { initializeI18n, t, setOnLanguageChangeCallback } from "./utils/i18n";
+import { updateStats } from "./utils/updateStats";
 
 let statusBarItem: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
@@ -110,9 +110,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		if (token) {
 			log("[Initialization] Checking usage-based pricing status...");
 			const status = await checkUsageBasedStatus(token);
-			log(
-				`[Initialization] Usage-based pricing is ${status.isEnabled ? "enabled" : "disabled"}${status.limit ? ` with limit $${status.limit}` : ""}`,
-			);
+			const statusText = status.isEnabled ? "enabled" : "disabled";
+			const limitText = status.limit ? ` with limit $${status.limit}` : "";
+			log(`[Initialization] Usage-based pricing is ${statusText}${limitText}`);
 		}
 
 		// Register commands
@@ -123,21 +123,19 @@ export async function activate(context: vscode.ExtensionContext) {
 		});
 		const openCursorSettings = vscode.commands.registerCommand("cursor-stats.openSettings", async () => {
 			log("[Command] Opening extension settings...");
-			// Use a more reliable way to open settings
-			const settingsUri = vscode.Uri.parse("vscode://ms-vscode.cursor-stats/settings");
 			try {
 				// Try to open settings directly first
 				await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:Dwtexe.cursor-stats");
-			} catch (error) {
-				log("[Command] Failed to open settings directly, trying alternative method...", true);
+			} catch (error: any) {
+				log(`[Command] Failed to open settings directly, trying alternative method... Error: ${error.message}`, true);
 				try {
 					// Fallback to opening settings view
 					await vscode.commands.executeCommand("workbench.action.openSettings");
 					// Then search for our extension
 					await vscode.commands.executeCommand("workbench.action.search.toggleQueryDetails");
 					await vscode.commands.executeCommand("workbench.action.search.action.replaceAll", "@ext:Dwtexe.cursor-stats");
-				} catch (fallbackError) {
-					log("[Command] Failed to open settings with fallback method", true);
+				} catch (fallbackError: any) {
+					log(`[Command] Failed to open settings with fallback method. Error: ${fallbackError.message}`, true);
 					// Show error message to user
 					vscode.window.showErrorMessage(t("notifications.failedToOpenSettings"));
 				}
@@ -291,11 +289,14 @@ export async function activate(context: vscode.ExtensionContext) {
 		// Register package.json configuration contribution
 		context.subscriptions.push(
 			vscode.commands.registerCommand("cursor-stats.selectCurrency", async () => {
-				const currencyPicks = SUPPORTED_CURRENCIES.map((code) => ({
-					label: `${code} (${t(`currency.${code.toLowerCase()}`)})`,
-					description: code === "USD" ? "Default" : "",
-					code,
-				}));
+				const currencyPicks = SUPPORTED_CURRENCIES.map((code) => {
+					const translationKey = `currency.${code.toLowerCase()}`;
+					return {
+						label: `${code} (${t(translationKey)})`,
+						description: code === "USD" ? "Default" : "",
+						code,
+					};
+				});
 
 				const selected = await vscode.window.showQuickPick(currencyPicks, {
 					placeHolder: t("commands.selectCurrencyPrompt"),

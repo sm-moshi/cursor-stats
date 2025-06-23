@@ -1,8 +1,8 @@
+import type * as vscode from "vscode";
 import { getRefreshIntervalMs } from "../extension";
 import { updateStats } from "../utils/updateStats";
-import { log } from "./logger";
-import type * as vscode from "vscode";
 import { t } from "./i18n";
+import { log } from "./logger";
 
 // Private state
 let _countdownInterval: NodeJS.Timeout | null = null;

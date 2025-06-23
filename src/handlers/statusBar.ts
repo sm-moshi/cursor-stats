@@ -1,15 +1,15 @@
 import * as vscode from "vscode";
-import { log } from "../utils/logger";
 import { getCurrentUsageLimit } from "../services/api";
 import { getCursorTokenFromDB } from "../services/database";
 import { convertAndFormatCurrency } from "../utils/currency";
 import { t } from "../utils/i18n";
+import { log } from "../utils/logger";
 import {
-	shouldShowProgressBars,
+	calculateDailyRemaining,
 	createPeriodProgressBar,
 	createUsageProgressBar,
-	calculateDailyRemaining,
 	getMonthNumber,
+	shouldShowProgressBars,
 } from "../utils/progressBars";
 
 let statusBarItem: vscode.StatusBarItem;

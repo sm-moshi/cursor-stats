@@ -1,8 +1,8 @@
-import * as vscode from "vscode";
-import * as path from "node:path";
 import * as fs from "node:fs";
-import { log } from "./logger";
+import * as path from "node:path";
+import * as vscode from "vscode";
 import type { LanguagePack } from "../interfaces/i18n";
+import { log } from "./logger";
 
 // Language pack storage
 const languagePacks: { [key: string]: LanguagePack } = {};
