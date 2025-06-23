@@ -1,7 +1,7 @@
 import axios from "axios";
 import * as fs from "node:fs";
 import { getExtensionContext } from "../extension";
-import { getErrorMessage, isApiError, isNodeError, isParseError } from "../interfaces/errors";
+import { getErrorMessage, isApiError, logStructuredError } from "../interfaces/errors";
 import type {
 	CursorStats,
 	CursorUsageResponse,
@@ -86,122 +86,156 @@ export async function checkUsageBasedStatus(token: string): Promise<{ isEnabled:
 	}
 }
 
+/**
+ * Processes mid-month payment items and updates the running total
+ * @param item Invoice item to process
+ * @param currentMidMonthTotal Current running total of mid-month payments
+ * @returns Object containing updated total and usage item, or null if not a mid-month payment
+ */
+function processMidMonthPayment(
+	item: { description: string; cents?: number },
+	currentMidMonthTotal: number,
+): { updatedTotal: number; usageItem: UsageItem } | null {
+	// Check if this is a mid-month payment
+	if (!item.description.includes("Mid-month usage paid")) {
+		return null;
+	}
+
+	// Skip if cents is undefined
+	if (typeof item.cents === "undefined") {
+		return null;
+	}
+
+	// Calculate the payment amount (convert from cents to dollars)
+	const paymentAmount = Math.abs(item.cents) / 100;
+	const updatedTotal = currentMidMonthTotal + paymentAmount;
+
+	log(`[API] Added mid-month payment of $${paymentAmount.toFixed(2)}, total now: $${updatedTotal.toFixed(2)}`);
+
+	// Create a special usage item for mid-month payment that statusBar.ts can parse
+	const usageItem: UsageItem = {
+		calculation: `${t("api.midMonthPayment")}: $${updatedTotal.toFixed(2)}`,
+		totalDollars: `-$${updatedTotal.toFixed(2)}`,
+		description: item.description,
+	};
+
+	return { updatedTotal, usageItem };
+}
+
+/**
+ * Fetches raw monthly invoice data from the API or dev file
+ * @param token Authentication token
+ * @param month Month to fetch (1-12)
+ * @param year Year to fetch
+ * @returns Raw monthly invoice response data
+ */
+async function fetchMonthlyInvoiceData(token: string, month: number, year: number): Promise<MonthlyInvoiceApiResponse> {
+	log(`[API] Fetching raw invoice data for ${month}/${year}`);
+
+	// Path to local dev data file, leave empty for production
+	const devDataPath: string = "";
+
+	if (devDataPath) {
+		try {
+			log(`[API] Dev mode enabled, reading from: ${devDataPath}`);
+			const rawData = fs.readFileSync(devDataPath, "utf8");
+			const parsedData = JSON.parse(rawData);
+			log("[API] Successfully loaded dev data");
+			return parsedData;
+		} catch (devError: unknown) {
+			logStructuredError(devError, "[API]", "Error reading dev data");
+			throw devError;
+		}
+	}
+
+	// Production API call
+	const response = await axios.post<MonthlyInvoiceApiResponse>(
+		"https://www.cursor.com/api/dashboard/get-monthly-invoice",
+		{
+			month,
+			year,
+			includeUsageEvents: false,
+		},
+		{
+			headers: {
+				Cookie: `WorkosCursorSessionToken=${token}`,
+			},
+		},
+	);
+
+	return response.data;
+}
+
+/**
+ * Calculates padding widths for formatting usage items consistently
+ * @param items Array of invoice items to analyze
+ * @returns Object containing padding widths for request counts and costs
+ */
+function calculatePaddingWidths(items: { description: string; cents?: number }[]): {
+	paddingWidth: number;
+	costPaddingWidth: number;
+} {
+	let maxRequestCount = 0;
+	let maxCostCentsForPadding = 0;
+
+	// First pass: find the maximum request count and cost per request among valid items
+	for (const item of items) {
+		// Skip items without cents value or mid-month payments
+		if (
+			!Object.hasOwn(item, "cents") ||
+			typeof item.cents === "undefined" ||
+			item.description.includes("Mid-month usage paid")
+		) {
+			continue;
+		}
+
+		let currentItemRequestCount = 0;
+		const tokenBasedMatch = item.description.match(/^(\d+) token-based usage calls to/);
+		if (tokenBasedMatch?.[1]) {
+			currentItemRequestCount = Number.parseInt(tokenBasedMatch[1]);
+		} else {
+			const originalMatch = item.description.match(/^(\d+)/); // Match digits at the beginning
+			if (originalMatch?.[1]) {
+				currentItemRequestCount = Number.parseInt(originalMatch[1]);
+			}
+		}
+
+		if (currentItemRequestCount > 0) {
+			maxRequestCount = Math.max(maxRequestCount, currentItemRequestCount);
+
+			// Calculate cost per request for this item to find maximum
+			const costPerRequestCents = item.cents / currentItemRequestCount;
+			maxCostCentsForPadding = Math.max(maxCostCentsForPadding, costPerRequestCents);
+		}
+	}
+
+	// Calculate the padding width based on the maximum request count
+	const paddingWidth = maxRequestCount > 0 ? maxRequestCount.toString().length : 1; // Ensure paddingWidth is at least 1
+
+	// Calculate the padding width for cost per request (format to 3 decimal places and find max width)
+	const maxCostPerRequestForPaddingFormatted = (maxCostCentsForPadding / 100).toFixed(3);
+	const costPaddingWidth = maxCostPerRequestForPaddingFormatted.length;
+
+	return { paddingWidth, costPaddingWidth };
+}
+
 async function fetchMonthData(
 	token: string,
 	month: number,
 	year: number,
 ): Promise<{ items: UsageItem[]; hasUnpaidMidMonthInvoice: boolean; midMonthPayment: number }> {
-	log(`[API] Fetching data for ${month}/${year}`);
+	log(`[API] Processing monthly data for ${month}/${year}`);
 	try {
-		// Path to local dev data file, leave empty for production
-		const devDataPath: string = "";
-
-		let response: { data: MonthlyInvoiceApiResponse };
-		if (devDataPath) {
-			try {
-				log(`[API] Dev mode enabled, reading from: ${devDataPath}`);
-				const rawData = fs.readFileSync(devDataPath, "utf8");
-				response = { data: JSON.parse(rawData) };
-				log("[API] Successfully loaded dev data");
-			} catch (devError: unknown) {
-				const errorMessage = getErrorMessage(devError);
-				log(`[API] Error reading dev data: ${errorMessage}`, true);
-
-				if (isNodeError(devError)) {
-					log(`[API] File system error: ${devError.path || "unknown"} - ${devError.syscall || "unknown"}`, true);
-				} else if (isParseError(devError)) {
-					log("[API] JSON parse error in dev data file", true);
-				}
-				throw devError;
-			}
-		} else {
-			response = await axios.post(
-				"https://www.cursor.com/api/dashboard/get-monthly-invoice",
-				{
-					month,
-					year,
-					includeUsageEvents: false,
-				},
-				{
-					headers: {
-						Cookie: `WorkosCursorSessionToken=${token}`,
-					},
-				},
-			);
-		}
+		// Fetch raw data using dedicated function
+		const invoiceData = await fetchMonthlyInvoiceData(token, month, year);
 
 		const usageItems: UsageItem[] = [];
 		let midMonthPayment = 0;
-		const items = response.data.items ?? [];
+		const items = invoiceData.items ?? [];
 
 		if (items.length > 0) {
-			// First pass: find the maximum request count and cost per request among valid items
-			let maxRequestCount = 0;
-			let maxCostPerRequest = 0;
-			for (const item of items) {
-				// Skip items without cents value or mid-month payments
-				if (
-					!Object.hasOwn(item, "cents") ||
-					typeof item.cents === "undefined" ||
-					item.description.includes("Mid-month usage paid")
-				) {
-					continue;
-				}
-
-				let currentItemRequestCount = 0;
-				const tokenBasedMatch = item.description.match(/^(\d+) token-based usage calls to/);
-				if (tokenBasedMatch?.[1]) {
-					currentItemRequestCount = Number.parseInt(tokenBasedMatch[1]);
-				} else {
-					const originalMatch = item.description.match(/^(\d+)/); // Match digits at the beginning
-					if (originalMatch?.[1]) {
-						currentItemRequestCount = Number.parseInt(originalMatch[1]);
-					}
-				}
-
-				if (currentItemRequestCount > 0) {
-					maxRequestCount = Math.max(maxRequestCount, currentItemRequestCount);
-
-					// Calculate cost per request for this item to find maximum
-					const costPerRequestCents = item.cents / currentItemRequestCount;
-					const costPerRequestDollars = costPerRequestCents / 100;
-					maxCostPerRequest = Math.max(maxCostPerRequest, costPerRequestDollars);
-				}
-			}
-
-			// Calculate the padding width based on the maximum request count
-			const paddingWidth = maxRequestCount > 0 ? maxRequestCount.toString().length : 1; // Ensure paddingWidth is at least 1
-
-			// Calculate the padding width for cost per request (format to 3 decimal places and find max width)
-			// Max cost will be something like "XX.XXX" or "X.XXX", so we need to find the max length of that string.
-			// Let's find the maximum cost in cents first to determine the number of integer digits.
-			let maxCostCentsForPadding = 0;
-			for (const item of items) {
-				if (
-					!Object.hasOwn(item, "cents") ||
-					typeof item.cents === "undefined" ||
-					item.description.includes("Mid-month usage paid")
-				) {
-					continue;
-				}
-				let currentItemRequestCount = 0;
-				const tokenBasedMatch = item.description.match(/^(\d+) token-based usage calls to/);
-				if (tokenBasedMatch?.[1]) {
-					currentItemRequestCount = Number.parseInt(tokenBasedMatch[1]);
-				} else {
-					const originalMatch = item.description.match(/^(\d+)/);
-					if (originalMatch?.[1]) {
-						currentItemRequestCount = Number.parseInt(originalMatch[1]);
-					}
-				}
-				if (currentItemRequestCount > 0) {
-					const costPerRequestCents = item.cents / currentItemRequestCount;
-					maxCostCentsForPadding = Math.max(maxCostCentsForPadding, costPerRequestCents);
-				}
-			}
-			// Now format this max cost per request to get its string length
-			const maxCostPerRequestForPaddingFormatted = (maxCostCentsForPadding / 100).toFixed(3);
-			const costPaddingWidth = maxCostPerRequestForPaddingFormatted.length;
+			// Calculate padding widths for consistent formatting
+			const { paddingWidth, costPaddingWidth } = calculatePaddingWidths(items);
 
 			for (const item of items) {
 				// Skip items without cents value
@@ -210,23 +244,11 @@ async function fetchMonthData(
 					continue;
 				}
 
-				// Check if this is a mid-month payment
-				if (item.description.includes("Mid-month usage paid")) {
-					// Skip if cents is undefined
-					if (typeof item.cents === "undefined") {
-						continue;
-					}
-					// Add to the total mid-month payment amount (convert from cents to dollars)
-					midMonthPayment += Math.abs(item.cents) / 100;
-					log(
-						`[API] Added mid-month payment of $${(Math.abs(item.cents) / 100).toFixed(2)}, total now: $${midMonthPayment.toFixed(2)}`,
-					);
-					// Add a special line for mid-month payment that statusBar.ts can parse
-					usageItems.push({
-						calculation: `${t("api.midMonthPayment")}: $${midMonthPayment.toFixed(2)}`,
-						totalDollars: `-$${midMonthPayment.toFixed(2)}`,
-						description: item.description,
-					});
+				// Check and process mid-month payments using dedicated function
+				const midMonthResult = processMidMonthPayment(item, midMonthPayment);
+				if (midMonthResult) {
+					midMonthPayment = midMonthResult.updatedTotal;
+					usageItems.push(midMonthResult.usageItem);
 					continue; // Skip adding this to regular usage items
 				}
 
@@ -341,7 +363,7 @@ async function fetchMonthData(
 
 		return {
 			items: usageItems,
-			hasUnpaidMidMonthInvoice: response.data.hasUnpaidMidMonthInvoice ?? false,
+			hasUnpaidMidMonthInvoice: invoiceData.hasUnpaidMidMonthInvoice ?? false,
 			midMonthPayment,
 		};
 	} catch (error: unknown) {
