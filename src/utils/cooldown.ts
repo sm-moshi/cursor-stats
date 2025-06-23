@@ -124,9 +124,9 @@ export function startRefreshInterval() {
 	log(`[Refresh] Starting refresh interval: ${intervalMs}ms`);
 	if (_statusBarItem) {
 		_refreshInterval = setInterval(() => {
-			if (!_cooldownStartTime) {
-				// Double-check we're not in cooldown
-				updateStats(_statusBarItem!);
+			if (!_cooldownStartTime && _statusBarItem) {
+				// Double-check we're not in cooldown and statusBarItem exists
+				updateStats(_statusBarItem);
 			}
 		}, intervalMs);
 	}

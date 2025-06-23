@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { resetNotifications } from "./handlers/notifications";
 import { createStatusBarItem } from "./handlers/statusBar";
+import { getErrorMessage, isVSCodeError } from "./interfaces/errors";
 import { checkUsageBasedStatus, getCurrentUsageLimit, setUsageLimit } from "./services/api";
 import { getCursorTokenFromDB } from "./services/database";
 import { checkForUpdates } from "./services/github";
@@ -21,7 +22,7 @@ import { updateStats } from "./utils/updateStats";
 let statusBarItem: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
 let outputChannel: vscode.OutputChannel | undefined;
-const lastReleaseCheck = 0;
+let lastReleaseCheck = 0;
 const RELEASE_CHECK_INTERVAL = 1000 * 60 * 60; // Check every hour
 
 export function getRefreshIntervalMs(): number {
@@ -69,8 +70,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		if (lastInstalledVersion && lastInstalledVersion !== currentVersion) {
 			// Show changelog for the current version (we've updated)
 			log(`[Update] Extension updated from ${lastInstalledVersion} to ${currentVersion}, showing changelog`);
-			setTimeout(() => {
-				checkForUpdates(0, 0, currentVersion);
+			setTimeout(async () => {
+				await checkForUpdates(0, 0, currentVersion);
 			}, 3000); // Slight delay to let extension finish activating
 		}
 
@@ -126,16 +127,40 @@ export async function activate(context: vscode.ExtensionContext) {
 			try {
 				// Try to open settings directly first
 				await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:Dwtexe.cursor-stats");
-			} catch (error: any) {
-				log(`[Command] Failed to open settings directly, trying alternative method... Error: ${error.message}`, true);
+			} catch (error: unknown) {
+				const errorMessage = getErrorMessage(error);
+				log(`[Command] Failed to open settings directly, trying alternative method... Error: ${errorMessage}`, true);
+
+				if (isVSCodeError(error)) {
+					log(
+						`[Command] VS Code settings error details: ${JSON.stringify({
+							command: error.command,
+							code: error.code,
+						})}`,
+						true,
+					);
+				}
+
 				try {
 					// Fallback to opening settings view
 					await vscode.commands.executeCommand("workbench.action.openSettings");
 					// Then search for our extension
 					await vscode.commands.executeCommand("workbench.action.search.toggleQueryDetails");
 					await vscode.commands.executeCommand("workbench.action.search.action.replaceAll", "@ext:Dwtexe.cursor-stats");
-				} catch (fallbackError: any) {
-					log(`[Command] Failed to open settings with fallback method. Error: ${fallbackError.message}`, true);
+				} catch (fallbackError: unknown) {
+					const fallbackErrorMessage = getErrorMessage(fallbackError);
+					log(`[Command] Failed to open settings with fallback method. Error: ${fallbackErrorMessage}`, true);
+
+					if (isVSCodeError(fallbackError)) {
+						log(
+							`[Command] VS Code fallback error details: ${JSON.stringify({
+								command: fallbackError.command,
+								code: fallbackError.code,
+							})}`,
+							true,
+						);
+					}
+
 					// Show error message to user
 					vscode.window.showErrorMessage(t("notifications.failedToOpenSettings"));
 				}
@@ -144,38 +169,51 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		// Add configuration change listener
 		const configListener = vscode.workspace.onDidChangeConfiguration(async (e) => {
-			if (e.affectsConfiguration("cursorStats.enableStatusBarColors")) {
-				log("[Settings] Status bar colors setting changed, updating display...");
-				await updateStats(statusBarItem);
-			}
-			if (e.affectsConfiguration("cursorStats.refreshInterval")) {
-				log("[Settings] Refresh interval changed, restarting timer...");
-				startRefreshInterval();
-			}
-			if (e.affectsConfiguration("cursorStats.showTotalRequests")) {
-				log("[Settings] Show total requests setting changed, updating display...");
-				await updateStats(statusBarItem);
-			}
-			if (e.affectsConfiguration("cursorStats.currency")) {
-				log("[Settings] Currency setting changed, updating display...");
-				await updateStats(statusBarItem);
-			}
-			if (e.affectsConfiguration("cursorStats.excludeWeekends")) {
-				log("[Settings] Exclude weekends setting changed, updating display...");
-				await updateStats(statusBarItem);
-			}
-			if (e.affectsConfiguration("cursorStats.showDailyRemaining")) {
-				log("[Settings] Show daily remaining setting changed, updating display...");
-				await updateStats(statusBarItem);
-			}
-			if (e.affectsConfiguration("cursorStats.spendingAlertThreshold")) {
-				log("[Settings] Spending alert threshold changed, resetting notifications and updating stats...");
-				resetNotifications(); // This will set isSpendingCheckInitialRun to true
-				await updateStats(statusBarItem); // This will trigger checkAndNotifySpending with the new logic
-			}
-			if (e.affectsConfiguration("cursorStats.language")) {
-				log("[Settings] Language setting changed, updating display...");
-				await updateStats(statusBarItem);
+			// Define configuration handlers using a lookup table for cleaner code
+			const configHandlers = {
+				"cursorStats.enableStatusBarColors": {
+					message: "[Settings] Status bar colors setting changed, updating display...",
+					action: () => updateStats(statusBarItem),
+				},
+				"cursorStats.refreshInterval": {
+					message: "[Settings] Refresh interval changed, restarting timer...",
+					action: () => startRefreshInterval(),
+				},
+				"cursorStats.showTotalRequests": {
+					message: "[Settings] Show total requests setting changed, updating display...",
+					action: () => updateStats(statusBarItem),
+				},
+				"cursorStats.currency": {
+					message: "[Settings] Currency setting changed, updating display...",
+					action: () => updateStats(statusBarItem),
+				},
+				"cursorStats.excludeWeekends": {
+					message: "[Settings] Exclude weekends setting changed, updating display...",
+					action: () => updateStats(statusBarItem),
+				},
+				"cursorStats.showDailyRemaining": {
+					message: "[Settings] Show daily remaining setting changed, updating display...",
+					action: () => updateStats(statusBarItem),
+				},
+				"cursorStats.spendingAlertThreshold": {
+					message: "[Settings] Spending alert threshold changed, resetting notifications and updating stats...",
+					action: async () => {
+						resetNotifications(); // This will set isSpendingCheckInitialRun to true
+						await updateStats(statusBarItem); // This will trigger checkAndNotifySpending with the new logic
+					},
+				},
+				"cursorStats.language": {
+					message: "[Settings] Language setting changed, updating display...",
+					action: () => updateStats(statusBarItem),
+				},
+			};
+
+			// Process configuration changes using the lookup table
+			for (const [configKey, handler] of Object.entries(configHandlers)) {
+				if (e.affectsConfiguration(configKey)) {
+					log(handler.message);
+					await handler.action();
+				}
 			}
 		});
 
@@ -277,8 +315,21 @@ export async function activate(context: vscode.ExtensionContext) {
 						}
 						break;
 				}
-			} catch (error: any) {
-				vscode.window.showErrorMessage(t("commands.failedToManageLimit", { error: error.message }));
+			} catch (error: unknown) {
+				const errorMessage = getErrorMessage(error);
+				log(`[Command] Failed to manage usage limit: ${errorMessage}`, true);
+
+				if (error instanceof Error) {
+					log(
+						`[Command] Limit management error details: ${JSON.stringify({
+							name: error.name,
+							stack: error.stack,
+						})}`,
+						true,
+					);
+				}
+
+				vscode.window.showErrorMessage(t("commands.failedToManageLimit", { error: errorMessage }));
 			}
 		});
 
@@ -367,7 +418,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		setTimeout(async () => {
 			await updateStats(statusBarItem);
 			// Check for updates after initial stats are loaded
-			await checkForUpdates(lastReleaseCheck, RELEASE_CHECK_INTERVAL);
+			lastReleaseCheck = await checkForUpdates(lastReleaseCheck, RELEASE_CHECK_INTERVAL);
 		}, 1500);
 
 		// Register configuration for the progress bars

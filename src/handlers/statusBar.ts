@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { getErrorMessage, isParseError } from "../interfaces/errors";
 import { getCurrentUsageLimit } from "../services/api";
 import { getCursorTokenFromDB } from "../services/database";
 import { convertAndFormatCurrency } from "../utils/currency";
@@ -206,8 +207,21 @@ export async function createMarkdownTooltip(
 						try {
 							const jsonStr = metadataLine.split("__USD_USAGE_DATA__:")[1].trim();
 							originalUsageData = JSON.parse(jsonStr);
-						} catch (e: any) {
-							log(`[Status Bar] Error parsing USD data: ${e.message}`, true);
+						} catch (error: unknown) {
+							const errorMessage = getErrorMessage(error);
+							log(`[Status Bar] Error parsing USD data: ${errorMessage}`, true);
+
+							if (isParseError(error)) {
+								log(`[Status Bar] JSON parse error at position ${error.position}`, true);
+							} else if (error instanceof Error) {
+								log(
+									`[Status Bar] Parsing error details: ${JSON.stringify({
+										name: error.name,
+										stack: error.stack,
+									})}`,
+									true,
+								);
+							}
 						}
 					}
 				}
@@ -219,7 +233,7 @@ export async function createMarkdownTooltip(
 				if (costLine) {
 					// Extract the cost value, regardless of currency format
 					const costMatch = costLine.match(/[^0-9]*([0-9.,]+)/);
-					if (costMatch && costMatch[1]) {
+					if (costMatch?.[1]) {
 						// Convert back to a number, removing any non-numeric characters except decimal point
 						totalCost = Number.parseFloat(costMatch[1].replace(/[^0-9.]/g, ""));
 						formattedTotalCost = costLine.split(":")[1].trim();
@@ -240,7 +254,7 @@ export async function createMarkdownTooltip(
 
 						// Use the original USD data for percentage calculation if available
 						let usagePercentage = "0.0";
-						if (originalUsageData && originalUsageData.percentage) {
+						if (originalUsageData?.percentage) {
 							usagePercentage = originalUsageData.percentage;
 						} else {
 							// Fallback to calculating with converted values
@@ -308,7 +322,7 @@ export async function createMarkdownTooltip(
 					if (informationalMidMonthLine) {
 						// Extract the payment amount from the informational line
 						const paymentMatch = informationalMidMonthLine.match(/paid ([^ ]+)/); // Match the amount after "paid "
-						if (paymentMatch && paymentMatch[1]) {
+						if (paymentMatch?.[1]) {
 							formattedMidMonthPayment = paymentMatch[1];
 							// Attempt to parse the numerical value, removing currency symbols/commas
 							midMonthPayment = Number.parseFloat(formattedMidMonthPayment.replace(/[^0-9.]/g, "")) || 0;
@@ -329,7 +343,7 @@ export async function createMarkdownTooltip(
 							.find((line) => line.includes(unpaidPrefix))
 							?.split(`${unpaidPrefix}:`)[1]
 							.trim();
-						if (extractedUnpaidAmountStr && extractedUnpaidAmountStr.endsWith(")")) {
+						if (extractedUnpaidAmountStr?.endsWith(")")) {
 							extractedUnpaidAmountStr = extractedUnpaidAmountStr.slice(0, -1);
 						}
 						const formattedUnpaidAmount = extractedUnpaidAmountStr ?? (await convertAndFormatCurrency(unpaidAmount));
@@ -342,8 +356,20 @@ export async function createMarkdownTooltip(
 				} else {
 					tooltip.appendMarkdown(`> ℹ️ ${t("statusBar.noUsageRecorded")}\n\n`);
 				}
-			} catch (error: any) {
-				log(`[API] Error fetching limit for tooltip: ${error.message}`, true);
+			} catch (error: unknown) {
+				const errorMessage = getErrorMessage(error);
+				log(`[API] Error fetching limit for tooltip: ${errorMessage}`, true);
+
+				if (error instanceof Error) {
+					log(
+						`[API] Tooltip error details: ${JSON.stringify({
+							name: error.name,
+							stack: error.stack,
+						})}`,
+						true,
+					);
+				}
+
 				tooltip.appendMarkdown(`> ⚠️ ${t("statusBar.errorCheckingStatus")}\n\n`);
 			}
 		} else {
@@ -382,7 +408,7 @@ export function getStatusBarColor(percentage: number): vscode.ThemeColor | strin
 	const colorsEnabled = config.get<boolean>("enableStatusBarColors", true);
 	const customThresholds = config.get<ColorThreshold[]>("statusBarColorThresholds");
 
-	const defaultColor: vscode.ThemeColor | string = new vscode.ThemeColor("statusBarItem.foreground"); // Default color if disabled or no match
+	const defaultColor: vscode.ThemeColor | string = new vscode.ThemeColor("statusBarItem.foreground");
 
 	if (!colorsEnabled) {
 		return defaultColor;
@@ -404,49 +430,27 @@ export function getStatusBarColor(percentage: number): vscode.ThemeColor | strin
 		}
 	}
 
-	// Fallback to original hardcoded logic if no custom thresholds or no match found
-	// (Or return a default color - let's stick to the original logic as fallback for now)
-	if (percentage >= 95) {
-		return "#CC0000";
-	}
-	if (percentage >= 90) {
-		return "#FF3333";
-	}
-	if (percentage >= 85) {
-		return "#FF4D4D";
-	}
-	if (percentage >= 80) {
-		return "#FF6600";
-	}
-	if (percentage >= 75) {
-		return "#FF8800";
-	}
-	if (percentage >= 70) {
-		return "#FFAA00";
-	}
-	if (percentage >= 65) {
-		return "#FFCC00";
-	}
-	if (percentage >= 60) {
-		return "#FFE066";
-	}
-	if (percentage >= 50) {
-		return "#DCE775";
-	}
-	if (percentage >= 40) {
-		return "#66BB6A";
-	}
-	if (percentage >= 30) {
-		return "#81C784";
-	}
-	if (percentage >= 20) {
-		return "#B3E6B3";
-	}
-	if (percentage >= 10) {
-		return "#E8F5E9";
-	}
-	// If percentage is below all custom/default thresholds, use the default color
-	return "#FFFFFF";
+	// Fallback to original logic using threshold array (more maintainable than nested ifs)
+	const defaultThresholds = [
+		{ percentage: 95, color: "#CC0000" },
+		{ percentage: 90, color: "#FF3333" },
+		{ percentage: 85, color: "#FF4D4D" },
+		{ percentage: 80, color: "#FF6600" },
+		{ percentage: 75, color: "#FF8800" },
+		{ percentage: 70, color: "#FFAA00" },
+		{ percentage: 65, color: "#FFCC00" },
+		{ percentage: 60, color: "#FFE066" },
+		{ percentage: 50, color: "#DCE775" },
+		{ percentage: 40, color: "#66BB6A" },
+		{ percentage: 30, color: "#81C784" },
+		{ percentage: 20, color: "#B3E6B3" },
+		{ percentage: 10, color: "#E8F5E9" },
+	];
+
+	// Find the first threshold that matches (already sorted in descending order)
+	const matchedThreshold = defaultThresholds.find((threshold) => percentage >= threshold.percentage);
+
+	return matchedThreshold ? matchedThreshold.color : "#FFFFFF";
 }
 
 export function getMonthName(month: number): string {

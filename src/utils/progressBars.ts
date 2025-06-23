@@ -31,12 +31,18 @@ export function createProgressBar(
 
 	let bar = "";
 
-	// Choose emoji color based on thresholds
 	let filledEmoji = PROGRESS_FILLED;
-	if (clampedPercentage >= criticalThreshold) {
-		filledEmoji = PROGRESS_CRITICAL;
-	} else if (clampedPercentage >= warningThreshold) {
-		filledEmoji = PROGRESS_WARNING;
+
+	// Use a more structured approach for threshold-based emoji selection
+	const thresholds = [
+		{ threshold: criticalThreshold, emoji: PROGRESS_CRITICAL },
+		{ threshold: warningThreshold, emoji: PROGRESS_WARNING },
+	];
+
+	// Find the first threshold that applies (already sorted by priority)
+	const applicableThreshold = thresholds.find((t) => clampedPercentage >= t.threshold);
+	if (applicableThreshold) {
+		filledEmoji = applicableThreshold.emoji;
 	}
 
 	// Build the progress bar

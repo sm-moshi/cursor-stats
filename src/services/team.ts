@@ -1,8 +1,9 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
 import axios from "axios";
 import * as jwt from "jsonwebtoken";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type * as vscode from "vscode";
+import { getErrorMessage, isApiError, isNodeError, isParseError } from "../interfaces/errors";
 import type { CursorUsageResponse, TeamInfo, TeamMemberInfo, TeamUsageResponse, UserCache } from "../interfaces/types";
 import { log } from "../utils/logger";
 
@@ -22,17 +23,24 @@ export async function loadUserCache(context: vscode.ExtensionContext): Promise<U
 			return cache;
 		}
 		log("[Team] No cache file found");
-	} catch (error: any) {
-		log("[Team] Error loading user cache", error.message, true);
-		log(
-			"[Team] Cache error details",
-			{
-				name: error.name,
-				stack: error.stack,
-				code: error.code,
-			},
-			true,
-		);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log("[Team] Error loading user cache", errorMessage, true);
+
+		if (isNodeError(error)) {
+			log("[Team] File system error", { errno: error.errno, path: error.path, syscall: error.syscall }, true);
+		} else if (isParseError(error)) {
+			log("[Team] JSON parse error in cache file", { position: error.position }, true);
+		} else if (error instanceof Error) {
+			log(
+				"[Team] Cache error details",
+				{
+					name: error.name,
+					stack: error.stack,
+				},
+				true,
+			);
+		}
 	}
 	return null;
 }
@@ -50,17 +58,22 @@ export async function saveUserCache(context: vscode.ExtensionContext, cache: Use
 
 		fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2));
 		log("[Team] Cache saved successfully");
-	} catch (error: any) {
-		log("[Team] Error saving user cache", error.message, true);
-		log(
-			"[Team] Save error details",
-			{
-				name: error.name,
-				stack: error.stack,
-				code: error.code,
-			},
-			true,
-		);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log("[Team] Error saving user cache", errorMessage, true);
+
+		if (isNodeError(error)) {
+			log("[Team] File system error", { errno: error.errno, path: error.path, syscall: error.syscall }, true);
+		} else if (error instanceof Error) {
+			log(
+				"[Team] Save error details",
+				{
+					name: error.name,
+					stack: error.stack,
+				},
+				true,
+			);
+		}
 	}
 }
 
@@ -114,8 +127,8 @@ export async function checkTeamMembership(
 			},
 		);
 
-		const isTeamMember = response.data.teams && response.data.teams.length > 0;
-		const teamId = isTeamMember ? response.data.teams[0].id : undefined;
+		const isTeamMember = (response.data.teams?.length ?? 0) > 0;
+		const teamId = response.data.teams?.[0]?.id;
 		log("[Team] Teams API response", {
 			isTeamMember,
 			teamId,
@@ -158,21 +171,24 @@ export async function checkTeamMembership(
 		await saveUserCache(context, cacheData);
 
 		return { isTeamMember, teamId, userId: teamUserId, startOfMonth };
-	} catch (error: any) {
-		log("[Team] Error checking team membership", error.message, true);
-		log(
-			"[Team] API error details",
-			{
-				status: error.response?.status,
-				data: error.response?.data,
-				headers: error.response?.headers,
-				config: {
-					url: error.config?.url,
-					method: error.config?.method,
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log("[Team] Error checking team membership", errorMessage, true);
+
+		if (isApiError(error)) {
+			log(
+				"[Team] API error details",
+				{
+					status: error.response?.status,
+					data: error.response?.data,
+					headers: error.response?.headers,
+					config: error.config,
 				},
-			},
-			true,
-		);
+				true,
+			);
+		} else if (error instanceof Error) {
+			log("[Team] General error details", { name: error.name, stack: error.stack }, true);
+		}
 		throw error;
 	}
 }
@@ -194,21 +210,24 @@ export async function getTeamUsage(token: string, teamId: number): Promise<TeamU
 			status: response.status,
 		});
 		return response.data;
-	} catch (error: any) {
-		log("[Team] Error fetching team usage", error.message, true);
-		log(
-			"[Team] Team usage error details",
-			{
-				status: error.response?.status,
-				data: error.response?.data,
-				headers: error.response?.headers,
-				config: {
-					url: error.config?.url,
-					method: error.config?.method,
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log("[Team] Error fetching team usage", errorMessage, true);
+
+		if (isApiError(error)) {
+			log(
+				"[Team] Team usage error details",
+				{
+					status: error.response?.status,
+					data: error.response?.data,
+					headers: error.response?.headers,
+					config: error.config,
 				},
-			},
-			true,
-		);
+				true,
+			);
+		} else if (error instanceof Error) {
+			log("[Team] General error details", { name: error.name, stack: error.stack }, true);
+		}
 		throw error;
 	}
 }

@@ -21,7 +21,7 @@ export function initializeI18n(): void {
 	if (!currentLanguagePack) {
 		const config = vscode.workspace.getConfiguration("cursorStats");
 		const language = config.get<string>("language", "en");
-		currentLanguagePack = languagePacks[language] || languagePacks["en"];
+		currentLanguagePack = languagePacks[language] || languagePacks.en;
 		currentLanguage = language;
 
 		if (!currentLanguagePack) {
@@ -103,7 +103,7 @@ function loadLanguagePacks(): void {
 	}
 
 	// Ensure English language pack is loaded (required default language)
-	if (!languagePacks["en"]) {
+	if (!languagePacks.en) {
 		log("[I18n] Critical: English language pack not loaded! Extension may not work properly.", true);
 	}
 
@@ -122,7 +122,7 @@ function updateCurrentLanguage(): void {
 		currentLanguage = newLanguage;
 
 		// Get language pack, fallback to English if not available
-		const languagePack = languagePacks[newLanguage] || languagePacks["en"];
+		const languagePack = languagePacks[newLanguage] || languagePacks.en;
 		if (languagePack) {
 			currentLanguagePack = languagePack;
 			log(`[I18n] Language changed to: ${newLanguage}`);
@@ -153,9 +153,9 @@ export function t(key: string, params?: { [key: string]: string | number }): str
 	let value = getTranslationValue(key, currentLanguagePack);
 
 	// If translation not found in current language and current language is not English, try English fallback
-	if (value === null && currentLanguage !== "en" && languagePacks["en"]) {
+	if (value === null && currentLanguage !== "en" && languagePacks.en) {
 		log(`[I18n] Translation key '${key}' not found in ${currentLanguage}, falling back to English`);
-		value = getTranslationValue(key, languagePacks["en"]);
+		value = getTranslationValue(key, languagePacks.en);
 	}
 
 	// If still no translation found, return the key itself
@@ -172,11 +172,11 @@ export function t(key: string, params?: { [key: string]: string | number }): str
 	// Replace parameters
 	if (params) {
 		Object.keys(params).forEach((param) => {
-			value = value.replace(new RegExp(`{${param}}`, "g"), params[param].toString());
+			value = (value as string).replace(new RegExp(`{${param}}`, "g"), params[param].toString());
 		});
 	}
 
-	return value;
+	return value as string;
 }
 
 /**
@@ -185,17 +185,17 @@ export function t(key: string, params?: { [key: string]: string | number }): str
  * @param languagePack Language pack to search in
  * @returns Translation value or null if not found
  */
-function getTranslationValue(key: string, languagePack: LanguagePack): any {
+function getTranslationValue(key: string, languagePack: LanguagePack): unknown {
 	if (!languagePack) {
 		return null;
 	}
 
 	const keys = key.split(".");
-	let value: any = languagePack;
+	let value: unknown = languagePack;
 
 	for (const k of keys) {
-		if (value && typeof value === "object" && k in value) {
-			value = value[k];
+		if (value && typeof value === "object" && value !== null && k in (value as Record<string, unknown>)) {
+			value = (value as Record<string, unknown>)[k];
 		} else {
 			return null; // Key not found
 		}

@@ -7,6 +7,7 @@ import {
 	getMaxLineWidth,
 	getStatusBarColor,
 } from "../handlers/statusBar";
+import { getErrorMessage, isApiError, isAuthError } from "../interfaces/errors";
 import { checkUsageBasedStatus, fetchCursorStats } from "../services/api";
 import { getCursorTokenFromDB } from "../services/database";
 import {
@@ -20,6 +21,7 @@ import {
 import { convertAndFormatCurrency, getCurrentCurrency } from "./currency";
 import { t } from "./i18n";
 import { log } from "./logger";
+import { logStructuredError } from "../interfaces/errors";
 
 // Track unknown models to avoid repeated notifications
 let unknownModelNotificationShown = false;
@@ -50,16 +52,61 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
 		// Show status bar early to ensure visibility
 		statusBarItem.show();
 
-		const stats = await fetchCursorStats(token).catch(async (error: any) => {
-			if (error.response?.status === 401 || error.response?.status === 403) {
-				log("[Auth] Token expired or invalid, attempting to refresh...", true);
-				const newToken = await getCursorTokenFromDB();
-				if (newToken) {
-					log("[Auth] Successfully retrieved new token, retrying stats fetch...");
-					return await fetchCursorStats(newToken);
-				}
+		const stats = await fetchCursorStats(token).catch(async (error: unknown) => {
+			const errorMessage = getErrorMessage(error);
+
+			// Define error handling strategies for cleaner logic
+			const errorHandlers = [
+				{
+					condition: (err: unknown) =>
+						isAuthError(err) || (isApiError(err) && (err.response?.status === 401 || err.response?.status === 403)),
+					handler: async () => {
+						log("[Auth] Token expired or invalid, attempting to refresh...", true);
+						const newToken = await getCursorTokenFromDB();
+						if (newToken) {
+							log("[Auth] Successfully retrieved new token, retrying stats fetch...");
+							return await fetchCursorStats(newToken);
+						}
+						throw error; // If no new token, re-throw original error
+					},
+				},
+			];
+
+			// Try to handle the error with available strategies
+			const matchedHandler = errorHandlers.find((handler) => handler.condition(error));
+			if (matchedHandler) {
+				return await matchedHandler.handler();
 			}
-			log(`[Critical] API error: ${error.message}`, true);
+
+			// Default error logging and re-throw
+			log(`[Critical] API error: ${errorMessage}`, true);
+
+			// Use structured error detail logging
+			const errorDetails = {
+				api: isApiError(error)
+					? {
+							status: error.response?.status,
+							statusText: error.response?.statusText,
+							isAxiosError: error.isAxiosError,
+							hasResponse: !!error.response,
+							hasRequest: !!error.request,
+						}
+					: null,
+				generic:
+					error instanceof Error
+						? {
+								name: error.name,
+								stack: error.stack,
+							}
+						: null,
+			};
+
+			if (errorDetails.api) {
+				log(`[Critical] API error details: ${JSON.stringify(errorDetails.api)}`, true);
+			} else if (errorDetails.generic) {
+				log(`[Critical] Error details: ${JSON.stringify(errorDetails.generic)}`, true);
+			}
+
 			throw error; // Re-throw to be caught by outer catch
 		});
 
@@ -270,18 +317,18 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
 
 						// Try to extract model name from specific patterns first
 						const tokenBasedDescMatch = item.description.match(/^(\d+) token-based usage calls to ([\w.-]+),/i);
-						if (tokenBasedDescMatch && tokenBasedDescMatch[2]) {
+						if (tokenBasedDescMatch?.[2]) {
 							extractedTermForNotification = tokenBasedDescMatch[2].trim();
 						} else {
 							const extraFastMatch = item.description.match(/extra fast premium requests? \(([^)]+)\)/i);
-							if (extraFastMatch && extraFastMatch[1]) {
+							if (extraFastMatch?.[1]) {
 								extractedTermForNotification = extraFastMatch[1].trim();
 							} else {
 								// General case: "N ACTUAL_MODEL_NAME_OR_PHRASE requests/calls"
 								const fullDescMatch = item.description.match(
 									/^(\d+)\s+(.+?)(?: request| calls)?(?: beyond|\*| per|$)/i,
 								);
-								if (fullDescMatch && fullDescMatch[2]) {
+								if (fullDescMatch?.[2]) {
 									extractedTermForNotification = fullDescMatch[2].trim();
 									// If it's discounted and starts with "discounted ", remove prefix
 									if (item.isDiscounted && extractedTermForNotification.toLowerCase().startsWith("discounted ")) {
@@ -290,7 +337,7 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
 								} else {
 									// Fallback: first word after number if other patterns fail (less likely to be useful)
 									const simpleDescMatch = item.description.match(/^(\d+)\s+([\w.-]+)/i); // Changed to [\w.-]+
-									if (simpleDescMatch && simpleDescMatch[2]) {
+									if (simpleDescMatch?.[2]) {
 										extractedTermForNotification = simpleDescMatch[2].trim();
 									}
 								}
@@ -377,7 +424,7 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
 
 					if (modelName) {
 						// Make sure modelName is there
-						const isDiscounted = item.description && item.description.toLowerCase().includes("discounted");
+						const isDiscounted = item.description?.toLowerCase().includes("discounted");
 						const isUnknown = modelName === "unknown-model";
 
 						if (isDiscounted) {
@@ -517,9 +564,12 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
 					}
 				});
 		}
-	} catch (error: any) {
+	} catch (error: unknown) {
 		const errorCount = incrementConsecutiveErrorCount();
-		log(`[Critical] API error: ${error.message}`, true);
-		log("[Status Bar] Status bar visibility updated after error");
+
+		// Use structured error logging utility
+		logStructuredError(error, "[Critical]", "API error");
+
+		log(`[Status Bar] Status bar visibility updated after error - Error count: ${errorCount}`);
 	}
 }

@@ -3,6 +3,7 @@ import { marked } from "marked";
 import * as semver from "semver";
 import * as vscode from "vscode";
 import { getExtensionContext } from "../extension";
+import { getErrorMessage, isApiError } from "../interfaces/errors";
 import type { GitHubRelease, ReleaseCheckResult } from "../interfaces/types";
 import { t } from "../utils/i18n";
 import { log } from "../utils/logger";
@@ -54,16 +55,20 @@ export async function checkGitHubRelease(): Promise<ReleaseCheckResult | null> {
 				downloadUrl: asset.browser_download_url,
 			})),
 		};
-	} catch (error: any) {
-		log(`[GitHub] Error checking for updates: ${error.message}`, true);
-		log(
-			`[GitHub] Error details: ${JSON.stringify({
-				status: error.response?.status,
-				data: error.response?.data,
-				message: error.message,
-			})}`,
-			true,
-		);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[GitHub] Error checking for updates: ${errorMessage}`, true);
+
+		if (isApiError(error)) {
+			log(
+				`[GitHub] Error details: ${JSON.stringify({
+					status: error.response?.status,
+					data: error.response?.data,
+					message: errorMessage,
+				})}`,
+				true,
+			);
+		}
 		return null;
 	}
 }
@@ -72,7 +77,7 @@ export async function checkForUpdates(
 	lastReleaseCheck: number,
 	RELEASE_CHECK_INTERVAL: number,
 	specificVersion?: string,
-): Promise<void> {
+): Promise<number> {
 	try {
 		const context = getExtensionContext();
 
@@ -88,22 +93,23 @@ export async function checkForUpdates(
 
 			if (!release) {
 				log(`[GitHub] No release found for version ${specificVersion}`);
-				return;
+				return lastReleaseCheck;
 			}
 
 			// Show changelog directly
 			showChangelogWebview(release, specificVersion);
-			return;
+			return lastReleaseCheck;
 		}
 
 		// Normal update check flow
 		const now = Date.now();
 		if (now - lastReleaseCheck < RELEASE_CHECK_INTERVAL) {
 			log("[GitHub] Skipping update check - too soon since last check");
-			return;
+			return lastReleaseCheck;
 		}
 
-		lastReleaseCheck = now;
+		// Update the timestamp and continue with the check
+		const updatedTimestamp = now;
 		const releaseInfo = await checkGitHubRelease();
 
 		if (releaseInfo?.hasUpdate) {
@@ -146,16 +152,23 @@ export async function checkForUpdates(
 				log(`[GitHub] Changelog for version ${releaseInfo.latestVersion} has already been shown`);
 			}
 		}
-	} catch (error: any) {
-		log(`[GitHub] Error checking for updates: ${error.message}`, true);
-		log(
-			`[GitHub] Error details: ${JSON.stringify({
-				status: error.response?.status,
-				data: error.response?.data,
-				message: error.message,
-			})}`,
-			true,
-		);
+
+		return updatedTimestamp;
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[GitHub] Error checking for updates: ${errorMessage}`, true);
+
+		if (isApiError(error)) {
+			log(
+				`[GitHub] Error details: ${JSON.stringify({
+					status: error.response?.status,
+					data: error.response?.data,
+					message: errorMessage,
+				})}`,
+				true,
+			);
+		}
+		return lastReleaseCheck;
 	}
 }
 
@@ -368,7 +381,8 @@ function showChangelogWebview(release: GitHubRelease, version: string): void {
 		if (version !== release.tag_name.replace("v", "")) {
 			vscode.window.showInformationMessage(t("github.installedMessage", { version: version }));
 		}
-	} catch (error: any) {
-		log(`[GitHub] Error showing changelog webview: ${error.message}`, true);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[GitHub] Error showing changelog webview: ${errorMessage}`, true);
 	}
 }

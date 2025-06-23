@@ -1,9 +1,10 @@
+import * as jwt from "jsonwebtoken";
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as jwt from "jsonwebtoken";
 import initSqlJs from "sql.js";
 import * as vscode from "vscode";
+import { getErrorMessage, isNodeError, isParseError, logStructuredError } from "../interfaces/errors";
 import { log } from "../utils/logger";
 
 // use globalStorageUri to get the user directory path
@@ -28,31 +29,37 @@ export function getCursorDBPath(): string {
 		log(`[Database] Using custom path: ${customPath}`);
 		return customPath;
 	}
-	const folderName = vscode.env.appName;
 
-	if (process.platform === "win32") {
-		return path.join(userDirPath, "User", "globalStorage", "state.vscdb");
-	}
-	if (process.platform === "linux") {
-		const isWSL = vscode.env.remoteName === "wsl";
-		if (isWSL) {
-			const windowsUsername = getWindowsUsername();
-			if (windowsUsername) {
-				return path.join(
-					"/mnt/c/Users",
-					windowsUsername,
-					"AppData/Roaming",
-					folderName,
-					"User/globalStorage/state.vscdb",
-				);
+	const folderName = vscode.env.appName;
+	const defaultPath = path.join(userDirPath, "User", "globalStorage", "state.vscdb");
+
+	switch (process.platform) {
+		case "win32":
+			return defaultPath;
+
+		case "linux": {
+			const isWSL = vscode.env.remoteName === "wsl";
+			if (isWSL) {
+				const windowsUsername = getWindowsUsername();
+				if (windowsUsername) {
+					return path.join(
+						"/mnt/c/Users",
+						windowsUsername,
+						"AppData/Roaming",
+						folderName,
+						"User/globalStorage/state.vscdb",
+					);
+				}
 			}
+			return defaultPath;
 		}
-		return path.join(userDirPath, "User", "globalStorage", "state.vscdb");
+
+		case "darwin":
+			return defaultPath;
+
+		default:
+			return defaultPath;
 	}
-	if (process.platform === "darwin") {
-		return path.join(userDirPath, "User", "globalStorage", "state.vscdb");
-	}
-	return path.join(userDirPath, "User", "globalStorage", "state.vscdb");
 }
 
 export async function getCursorTokenFromDB(): Promise<string | undefined> {
@@ -82,43 +89,25 @@ export async function getCursorTokenFromDB(): Promise<string | undefined> {
 
 		try {
 			const decoded = jwt.decode(token, { complete: true });
+			const sub = decoded?.payload?.sub;
 
-			if (!decoded || typeof decoded.payload === "string" || !decoded.payload.sub) {
+			if (!sub || typeof decoded?.payload === "string" || typeof sub !== "string") {
 				log(`[Database] Invalid JWT structure: ${JSON.stringify({ decoded })}`, true);
 				db.close();
 				return undefined;
 			}
-
-			const sub = decoded.payload.sub;
 			const userId = sub.split("|")[1];
 			const sessionToken = `${userId}%3A%3A${token}`;
 			log(`[Database] Created session token, length: ${sessionToken.length}`);
 			db.close();
 			return sessionToken;
-		} catch (error: any) {
-			log(`[Database] Error processing token: ${error}`, true);
-			log(
-				"[Database] Error details: " +
-					JSON.stringify({
-						name: error.name,
-						message: error.message,
-						stack: error.stack,
-					}),
-				true,
-			);
+		} catch (error: unknown) {
+			logStructuredError(error, "[Database]", "Error processing token");
 			db.close();
 			return undefined;
 		}
-	} catch (error: any) {
-		log(`[Database] Error opening database: ${error}`, true);
-		log(
-			"[Database] Database error details: " +
-				JSON.stringify({
-					message: error.message,
-					stack: error.stack,
-				}),
-			true,
-		);
+	} catch (error: unknown) {
+		logStructuredError(error, "[Database]", "Error opening database");
 		return undefined;
 	}
 }

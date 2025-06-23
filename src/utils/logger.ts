@@ -16,7 +16,7 @@ export function initializeLogging(context: vscode.ExtensionContext): void {
 	}
 }
 
-export function log(message: string, data?: any, error = false): void {
+export function log(message: string, data?: unknown, error = false): void {
 	const config = vscode.workspace.getConfiguration("cursorStats");
 	const loggingEnabled = config.get<boolean>("enableLogging", false);
 
@@ -47,7 +47,7 @@ export function log(message: string, data?: any, error = false): void {
 	}
 }
 
-function safeLog(message: string, data?: any, isError = false): void {
+function safeLog(message: string, data?: unknown, isError = false): void {
 	const timestamp = new Date().toISOString();
 	const logLevel = isError ? "ERROR" : "INFO";
 	let logMessage = `[${timestamp}] [${logLevel}] ${message}`;

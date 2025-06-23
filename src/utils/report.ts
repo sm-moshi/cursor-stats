@@ -1,9 +1,10 @@
+import axios from "axios";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import axios from "axios";
 import * as vscode from "vscode";
 import { getExtensionContext } from "../extension";
+import { getErrorMessage, isNodeError, isVSCodeError } from "../interfaces/errors";
 import type { CursorReport, CursorUsageResponse } from "../interfaces/types";
 import { fetchCursorStats, getCurrentUsageLimit } from "../services/api";
 import { getCursorTokenFromDB } from "../services/database";
@@ -156,7 +157,7 @@ export async function generateReport(): Promise<{ reportPath: string; success: b
 					},
 				)
 				.then((response) => {
-					if (!report.rawResponses.monthlyInvoice) {
+					report.rawResponses.monthlyInvoice ??= {};
 					report.rawResponses.monthlyInvoice.current = response.data;
 					log("[Report] Successfully fetched current month invoice data");
 				})
@@ -181,7 +182,7 @@ export async function generateReport(): Promise<{ reportPath: string; success: b
 					},
 				)
 				.then((response) => {
-					if (!report.rawResponses.monthlyInvoice) {
+					report.rawResponses.monthlyInvoice ??= {};
 					report.rawResponses.monthlyInvoice.last = response.data;
 					log("[Report] Successfully fetched last month invoice data");
 				})
@@ -197,9 +198,20 @@ export async function generateReport(): Promise<{ reportPath: string; success: b
 		report.logs = getLogHistory().reverse();
 
 		return saveReport(report, context);
-	} catch (error: any) {
-		report.errors.general = `General error: ${error.message}`;
-		log(`[Report] General error during report generation: ${error.message}`, true);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		report.errors.general = `General error: ${errorMessage}`;
+		log(`[Report] General error during report generation: ${errorMessage}`, true);
+
+		if (error instanceof Error) {
+			log(
+				`[Report] General error details: ${JSON.stringify({
+					name: error.name,
+					stack: error.stack,
+				})}`,
+				true,
+			);
+		}
 
 		// Update logs with error entries
 		report.logs = getLogHistory().reverse();
@@ -225,8 +237,29 @@ function saveReport(
 
 		log(`[Report] Report saved successfully to: ${reportPath}`);
 		return Promise.resolve({ reportPath, success: true });
-	} catch (error: any) {
-		log(`[Report] Error saving report: ${error.message}`, true);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[Report] Error saving report: ${errorMessage}`, true);
+
+		if (isNodeError(error)) {
+			log(
+				`[Report] File system error details: ${JSON.stringify({
+					errno: error.errno,
+					syscall: error.syscall,
+					path: error.path,
+				})}`,
+				true,
+			);
+		} else if (error instanceof Error) {
+			log(
+				`[Report] Save error details: ${JSON.stringify({
+					name: error.name,
+					stack: error.stack,
+				})}`,
+				true,
+			);
+		}
+
 		return Promise.resolve({
 			reportPath: "",
 			success: false,
@@ -275,9 +308,28 @@ export const createReportCommand = vscode.commands.registerCommand("cursor-stats
 				} else {
 					vscode.window.showErrorMessage(t("errors.failedToCreateReport"));
 				}
-			} catch (error: any) {
-				vscode.window.showErrorMessage(t("errors.errorCreatingReport", { error: error.message }));
-				log(`[Report] Error: ${error.message}`, true);
+			} catch (error: unknown) {
+				const errorMessage = getErrorMessage(error);
+				vscode.window.showErrorMessage(t("errors.errorCreatingReport", { error: errorMessage }));
+				log(`[Report] Error: ${errorMessage}`, true);
+
+				if (isVSCodeError(error)) {
+					log(
+						`[Report] VS Code command error details: ${JSON.stringify({
+							command: error.command,
+							uri: error.uri,
+						})}`,
+						true,
+					);
+				} else if (error instanceof Error) {
+					log(
+						`[Report] Command error details: ${JSON.stringify({
+							name: error.name,
+							stack: error.stack,
+						})}`,
+						true,
+					);
+				}
 			}
 		},
 	);

@@ -1,8 +1,9 @@
+import axios from "axios";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import axios from "axios";
 import * as vscode from "vscode";
 import { getExtensionContext } from "../extension";
+import { getErrorMessage, isApiError, isNodeError, isParseError } from "../interfaces/errors";
 import type { CurrencyCache, CurrencyRates } from "../interfaces/types";
 import { log } from "./logger";
 
@@ -124,8 +125,30 @@ export async function getCachedRates(): Promise<CurrencyRates | null> {
 		} else {
 			log("[Currency] No cache file found");
 		}
-	} catch (error: any) {
-		log(`[Currency] Error reading cache: ${error.message}`, true);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[Currency] Error reading cache: ${errorMessage}`, true);
+
+		if (isNodeError(error)) {
+			log(
+				`[Currency] File system error details: ${JSON.stringify({
+					errno: error.errno,
+					syscall: error.syscall,
+					path: error.path,
+				})}`,
+				true,
+			);
+		} else if (isParseError(error)) {
+			log(`[Currency] JSON parse error at position ${error.position}`, true);
+		} else if (error instanceof Error) {
+			log(
+				`[Currency] Cache error details: ${JSON.stringify({
+					name: error.name,
+					stack: error.stack,
+				})}`,
+				true,
+			);
+		}
 	}
 
 	return null;
@@ -143,8 +166,28 @@ export async function saveCurrencyCache(rates: CurrencyRates): Promise<void> {
 
 		fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2));
 		log("[Currency] Exchange rates cached successfully");
-	} catch (error: any) {
-		log(`[Currency] Error saving cache: ${error.message}`, true);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[Currency] Error saving cache: ${errorMessage}`, true);
+
+		if (isNodeError(error)) {
+			log(
+				`[Currency] File system error details: ${JSON.stringify({
+					errno: error.errno,
+					syscall: error.syscall,
+					path: error.path,
+				})}`,
+				true,
+			);
+		} else if (error instanceof Error) {
+			log(
+				`[Currency] Cache save error details: ${JSON.stringify({
+					name: error.name,
+					stack: error.stack,
+				})}`,
+				true,
+			);
+		}
 	}
 }
 
@@ -168,9 +211,30 @@ export async function fetchExchangeRates(): Promise<CurrencyRates> {
 		await saveCurrencyCache(response.data);
 
 		return response.data;
-	} catch (error: any) {
-		log(`[Currency] Error fetching exchange rates: ${error.message}`, true);
-		throw new Error(`Failed to fetch currency exchange rates: ${error.message}`);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[Currency] Error fetching exchange rates: ${errorMessage}`, true);
+
+		if (isApiError(error)) {
+			log(
+				`[Currency] API error details: ${JSON.stringify({
+					status: error.response?.status,
+					statusText: error.response?.statusText,
+					isAxiosError: error.isAxiosError,
+				})}`,
+				true,
+			);
+		} else if (error instanceof Error) {
+			log(
+				`[Currency] Exchange rate fetch error details: ${JSON.stringify({
+					name: error.name,
+					stack: error.stack,
+				})}`,
+				true,
+			);
+		}
+
+		throw new Error(`Failed to fetch currency exchange rates: ${errorMessage}`);
 	}
 }
 
@@ -204,8 +268,20 @@ export async function convertAmount(
 		log(`[Currency] Converted $${amount} to ${symbol}${convertedValue.toFixed(2)} (${targetCurrency})`);
 
 		return { value: convertedValue, symbol };
-	} catch (error: any) {
-		log(`[Currency] Conversion error: ${error.message}`, true);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[Currency] Conversion error: ${errorMessage}`, true);
+
+		if (error instanceof Error) {
+			log(
+				`[Currency] Conversion error details: ${JSON.stringify({
+					name: error.name,
+					stack: error.stack,
+				})}`,
+				true,
+			);
+		}
+
 		return { value: amount, symbol: "$" }; // Fall back to USD
 	}
 }

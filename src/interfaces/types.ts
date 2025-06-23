@@ -55,7 +55,7 @@ export interface SQLiteError extends Error {
 
 export interface AxiosErrorData {
 	status?: number;
-	data?: any;
+	data?: unknown;
 	message?: string;
 }
 
@@ -68,9 +68,9 @@ export interface ComposerData {
 	conversation: Array<{
 		timingInfo?: {
 			clientStartTime: number;
-			[key: string]: any;
+			[key: string]: unknown;
 		};
-		[key: string]: any;
+		[key: string]: unknown;
 	}>;
 }
 
@@ -79,7 +79,7 @@ export interface TimingInfo {
 	timestamp: number;
 	timingInfo: {
 		clientStartTime: number;
-		[key: string]: any;
+		[key: string]: unknown;
 	};
 }
 
@@ -211,6 +211,17 @@ export interface CurrencyCache {
 	timestamp: number;
 }
 
+// API Response interfaces for proper typing
+export interface MonthlyInvoiceApiResponse {
+	items?: Array<{
+		description: string;
+		cents?: number;
+		[key: string]: unknown;
+	}>;
+	hasUnpaidMidMonthInvoice?: boolean;
+	[key: string]: unknown;
+}
+
 export interface CursorReport {
 	timestamp: string;
 	extensionVersion: string;
@@ -226,14 +237,14 @@ export interface CursorReport {
 	} | null;
 	teamUsage: TeamUsageResponse | null;
 	rawResponses: {
-		cursorStats?: any;
-		usageLimit?: any;
-		premiumUsage?: any;
-		teamInfo?: any;
-		teamUsage?: any;
+		cursorStats?: unknown;
+		usageLimit?: unknown;
+		premiumUsage?: unknown;
+		teamInfo?: unknown;
+		teamUsage?: unknown;
 		monthlyInvoice?: {
-			current?: any;
-			last?: any;
+			current?: unknown;
+			last?: unknown;
 		};
 	};
 	logs: string[];

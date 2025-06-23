@@ -1,10 +1,11 @@
-import * as fs from "node:fs";
 import axios from "axios";
+import * as fs from "node:fs";
 import { getExtensionContext } from "../extension";
+import { getErrorMessage, isApiError, isNodeError, isParseError } from "../interfaces/errors";
 import type {
 	CursorStats,
 	CursorUsageResponse,
-	ExtendedAxiosError,
+	MonthlyInvoiceApiResponse,
 	UsageItem,
 	UsageLimitResponse,
 } from "../interfaces/types";
@@ -24,8 +25,16 @@ export async function getCurrentUsageLimit(token: string): Promise<UsageLimitRes
 			},
 		);
 		return response.data;
-	} catch (error: any) {
-		log(`[API] Error fetching usage limit: ${error.message}`, true);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[API] Error fetching usage limit: ${errorMessage}`, true);
+
+		if (isApiError(error)) {
+			log(
+				`[API] API error details: ${JSON.stringify({ status: error.response?.status, data: error.response?.data })}`,
+				true,
+			);
+		}
 		throw error;
 	}
 }
@@ -47,8 +56,16 @@ export async function setUsageLimit(token: string, hardLimit: number, noUsageBas
 		log(
 			`[API] Successfully ${noUsageBasedAllowed ? "disabled" : "enabled"} usage-based pricing with limit: $${hardLimit}`,
 		);
-	} catch (error: any) {
-		log(`[API] Error setting usage limit: ${error.message}`, true);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[API] Error setting usage limit: ${errorMessage}`, true);
+
+		if (isApiError(error)) {
+			log(
+				`[API] API error details: ${JSON.stringify({ status: error.response?.status, data: error.response?.data })}`,
+				true,
+			);
+		}
 		throw error;
 	}
 }
@@ -60,8 +77,9 @@ export async function checkUsageBasedStatus(token: string): Promise<{ isEnabled:
 			isEnabled: !response.noUsageBasedAllowed,
 			limit: response.hardLimit,
 		};
-	} catch (error: any) {
-		log(`[API] Error checking usage-based status: ${error.message}`, true);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[API] Error checking usage-based status: ${errorMessage}`, true);
 		return {
 			isEnabled: false,
 		};
@@ -78,15 +96,22 @@ async function fetchMonthData(
 		// Path to local dev data file, leave empty for production
 		const devDataPath: string = "";
 
-		let response;
+		let response: { data: MonthlyInvoiceApiResponse };
 		if (devDataPath) {
 			try {
 				log(`[API] Dev mode enabled, reading from: ${devDataPath}`);
 				const rawData = fs.readFileSync(devDataPath, "utf8");
 				response = { data: JSON.parse(rawData) };
 				log("[API] Successfully loaded dev data");
-			} catch (devError: any) {
-				log(`[API] Error reading dev data: ${devError.message}`, true);
+			} catch (devError: unknown) {
+				const errorMessage = getErrorMessage(devError);
+				log(`[API] Error reading dev data: ${errorMessage}`, true);
+
+				if (isNodeError(devError)) {
+					log(`[API] File system error: ${devError.path || "unknown"} - ${devError.syscall || "unknown"}`, true);
+				} else if (isParseError(devError)) {
+					log("[API] JSON parse error in dev data file", true);
+				}
 				throw devError;
 			}
 		} else {
@@ -107,11 +132,13 @@ async function fetchMonthData(
 
 		const usageItems: UsageItem[] = [];
 		let midMonthPayment = 0;
-		if (response.data.items) {
+		const items = response.data.items ?? [];
+
+		if (items.length > 0) {
 			// First pass: find the maximum request count and cost per request among valid items
 			let maxRequestCount = 0;
 			let maxCostPerRequest = 0;
-			for (const item of response.data.items) {
+			for (const item of items) {
 				// Skip items without cents value or mid-month payments
 				if (
 					!Object.hasOwn(item, "cents") ||
@@ -123,11 +150,11 @@ async function fetchMonthData(
 
 				let currentItemRequestCount = 0;
 				const tokenBasedMatch = item.description.match(/^(\d+) token-based usage calls to/);
-				if (tokenBasedMatch && tokenBasedMatch[1]) {
+				if (tokenBasedMatch?.[1]) {
 					currentItemRequestCount = Number.parseInt(tokenBasedMatch[1]);
 				} else {
 					const originalMatch = item.description.match(/^(\d+)/); // Match digits at the beginning
-					if (originalMatch && originalMatch[1]) {
+					if (originalMatch?.[1]) {
 						currentItemRequestCount = Number.parseInt(originalMatch[1]);
 					}
 				}
@@ -149,7 +176,7 @@ async function fetchMonthData(
 			// Max cost will be something like "XX.XXX" or "X.XXX", so we need to find the max length of that string.
 			// Let's find the maximum cost in cents first to determine the number of integer digits.
 			let maxCostCentsForPadding = 0;
-			for (const item of response.data.items) {
+			for (const item of items) {
 				if (
 					!Object.hasOwn(item, "cents") ||
 					typeof item.cents === "undefined" ||
@@ -159,11 +186,11 @@ async function fetchMonthData(
 				}
 				let currentItemRequestCount = 0;
 				const tokenBasedMatch = item.description.match(/^(\d+) token-based usage calls to/);
-				if (tokenBasedMatch && tokenBasedMatch[1]) {
+				if (tokenBasedMatch?.[1]) {
 					currentItemRequestCount = Number.parseInt(tokenBasedMatch[1]);
 				} else {
 					const originalMatch = item.description.match(/^(\d+)/);
-					if (originalMatch && originalMatch[1]) {
+					if (originalMatch?.[1]) {
 						currentItemRequestCount = Number.parseInt(originalMatch[1]);
 					}
 				}
@@ -176,7 +203,7 @@ async function fetchMonthData(
 			const maxCostPerRequestForPaddingFormatted = (maxCostCentsForPadding / 100).toFixed(3);
 			const costPaddingWidth = maxCostPerRequestForPaddingFormatted.length;
 
-			for (const item of response.data.items) {
+			for (const item of items) {
 				// Skip items without cents value
 				if (!Object.hasOwn(item, "cents")) {
 					log(`[API] Skipping item without cents value: ${item.description}`);
@@ -232,22 +259,40 @@ async function fetchMonthData(
 							/\b(?:discounted\s+)?(claude-(?:3-(?:opus|sonnet|haiku)|3\.[57]-sonnet(?:-[\w-]+)?(?:-max)?|4-sonnet(?:-thinking)?)|gpt-(?:4(?:\.\d+|o-128k|-preview)?|3\.5-turbo)|gemini-(?:1\.5-flash-500k|2[.-]5-pro-(?:exp-\d{2}-\d{2}|preview-\d{2}-\d{2}|exp-max))|o[134](?:-mini)?)\b/i;
 						const specificModelMatch = item.description.match(genericModelPattern);
 
-						if (item.description.includes("tool calls")) {
-							parsedModelName = t("api.toolCalls");
-							isToolCall = true;
-						} else if (specificModelMatch) {
-							// Extract the model name (group 1), which excludes the "discounted" prefix
-							parsedModelName = specificModelMatch[1];
-						} else if (item.description.includes("extra fast premium request")) {
-							const extraFastModelMatch = item.description.match(/extra fast premium requests? \(([^)]+)\)/i);
-							if (extraFastModelMatch && extraFastModelMatch[1]) {
-								parsedModelName = extraFastModelMatch[1]; // e.g., Haiku
-							} else {
-								parsedModelName = t("api.fastPremium");
-							}
+						// Model parsing strategy - use lookup table approach for cleaner logic
+						const modelParsingStrategies = [
+							{
+								condition: () => item.description.includes("tool calls"),
+								parser: () => ({ modelName: t("api.toolCalls"), isToolCall: true }),
+							},
+							{
+								condition: () => !!specificModelMatch,
+								parser: () => ({
+									modelName: specificModelMatch ? specificModelMatch[1] : t("statusBar.unknownModel"),
+									isToolCall: false,
+								}),
+							},
+							{
+								condition: () => item.description.includes("extra fast premium request"),
+								parser: () => {
+									const extraFastModelMatch = item.description.match(/extra fast premium requests? \(([^)]+)\)/i);
+									return {
+										modelName: extraFastModelMatch?.[1] || t("api.fastPremium"),
+										isToolCall: false,
+									};
+								},
+							},
+						];
+
+						// Find the first matching strategy and apply it
+						const matchedStrategy = modelParsingStrategies.find((strategy) => strategy.condition());
+						if (matchedStrategy) {
+							const parseResult = matchedStrategy.parser();
+							parsedModelName = parseResult.modelName;
+							isToolCall = parseResult.isToolCall;
 						} else {
 							// Fallback for unknown model structure
-							parsedModelName = t("statusBar.unknownModel"); // Default to unknown-model
+							parsedModelName = t("statusBar.unknownModel");
 							log(
 								`[API] Could not determine specific model for (original format): "${item.description}". Using "${parsedModelName}".`,
 							);
@@ -296,21 +341,24 @@ async function fetchMonthData(
 
 		return {
 			items: usageItems,
-			hasUnpaidMidMonthInvoice: response.data.hasUnpaidMidMonthInvoice,
+			hasUnpaidMidMonthInvoice: response.data.hasUnpaidMidMonthInvoice ?? false,
 			midMonthPayment,
 		};
-	} catch (error: any) {
-		const axiosError = error as ExtendedAxiosError;
-		log(`[API] Error fetching monthly data for ${month}/${year}: ${axiosError.message}`, true);
-		log(
-			"[API] API error details: " +
-				JSON.stringify({
-					status: axiosError.response?.status,
-					data: axiosError.response?.data,
-					message: axiosError.message,
-				}),
-			true,
-		);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[API] Error fetching monthly data for ${month}/${year}: ${errorMessage}`, true);
+
+		if (isApiError(error)) {
+			log(
+				"[API] API error details: " +
+					JSON.stringify({
+						status: error.response?.status,
+						data: error.response?.data,
+						message: errorMessage,
+					}),
+				true,
+			);
+		}
 		throw error;
 	}
 }
@@ -324,7 +372,11 @@ export async function fetchCursorStats(token: string): Promise<CursorStats> {
 		const context = getExtensionContext();
 		const teamInfo = await checkTeamMembership(token, context);
 
-		let premiumRequests;
+		let premiumRequests: {
+			current: number;
+			limit: number;
+			startOfMonth: string;
+		};
 		if (teamInfo.isTeamMember && teamInfo.teamId && teamInfo.userId) {
 			// Fetch team usage for team members
 			log("[API] Fetching team usage data...");
@@ -387,17 +439,21 @@ export async function fetchCursorStats(token: string): Promise<CursorStats> {
 			},
 			premiumRequests,
 		};
-	} catch (error: any) {
-		log(`[API] Error fetching premium requests: ${error}`, true);
-		log(
-			"[API] API error details: " +
-				JSON.stringify({
-					status: error.response?.status,
-					data: error.response?.data,
-					message: error.message,
-				}),
-			true,
-		);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[API] Error fetching premium requests: ${errorMessage}`, true);
+
+		if (isApiError(error)) {
+			log(
+				"[API] API error details: " +
+					JSON.stringify({
+						status: error.response?.status,
+						data: error.response?.data,
+						message: errorMessage,
+					}),
+				true,
+			);
+		}
 		throw error;
 	}
 }
@@ -411,8 +467,16 @@ export async function getStripeSessionUrl(token: string): Promise<string> {
 		});
 		// Remove quotes from the response string
 		return response.data.replace(/"/g, "");
-	} catch (error: any) {
-		log(`[API] Error getting Stripe session URL: ${error.message}`, true);
+	} catch (error: unknown) {
+		const errorMessage = getErrorMessage(error);
+		log(`[API] Error getting Stripe session URL: ${errorMessage}`, true);
+
+		if (isApiError(error)) {
+			log(
+				`[API] Stripe API error: ${JSON.stringify({ status: error.response?.status, data: error.response?.data })}`,
+				true,
+			);
+		}
 		throw error;
 	}
 }

@@ -14,17 +14,7 @@
 	// Turn off tsc task auto detection since we have the necessary tasks as npm scripts
 	"typescript.tsc.autoDetect": "off",
 	"typescript.tsdk": "node_modules/typescript/lib",
-	"python.defaultInterpreterPath": "${workspaceFolder}/.vscode/mise-tools/python",
-	"typescript.native-preview.tsdk": "node_modules/@typescript/native-preview/",
-	"typescript.workspaceSymbols.scope": "currentProject",
-	"typescript.updateImportsOnPaste.enabled": true,
-	"typescript.tsserver.web.typeAcquisition.enabled": true,
 	"typescript.tsserver.experimental.enableProjectDiagnostics": true,
-	"typescript.preferences.preferTypeOnlyAutoImports": true,
-	"typescript.referencesCodeLens.enabled": true,
-	"typescript.preferGoToSourceDefinition": true,
-	"typescript.implementationsCodeLens.enabled": true,
-	"typescript.experimental.useTsgo": true,
-	"typescript.experimental.expandableHover": true,
-	"typescript.enablePromptUseWorkspaceTsdk": true,
+	"typescript.updateImportsOnPaste.enabled": true,
+	"typescript.workspaceSymbols.scope": "currentProject"
 }
