@@ -15,7 +15,7 @@
 	"typescript.tsc.autoDetect": "off",
 	"typescript.tsdk": "node_modules/typescript/lib",
 	"python.defaultInterpreterPath": "${workspaceFolder}/.vscode/mise-tools/python",
-	"typescript.native-preview.tsdk": " node_modules/@typescript/native-preview/",
+	"typescript.native-preview.tsdk": "node_modules/@typescript/native-preview/",
 	"typescript.workspaceSymbols.scope": "currentProject",
 	"typescript.updateImportsOnPaste.enabled": true,
 	"typescript.tsserver.web.typeAcquisition.enabled": true,
