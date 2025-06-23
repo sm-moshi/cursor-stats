@@ -1,7 +1,7 @@
-import axios from "axios";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import axios from "axios";
 import * as vscode from "vscode";
 import { getExtensionContext } from "../extension";
 import { getErrorMessage, isNodeError, isVSCodeError } from "../interfaces/errors";

@@ -1,5 +1,5 @@
-import axios from "axios";
 import * as fs from "node:fs";
+import axios from "axios";
 import { getExtensionContext } from "../extension";
 import { getErrorMessage, isApiError, logStructuredError } from "../interfaces/errors";
 import type {

@@ -1,10 +1,10 @@
-import * as jwt from "jsonwebtoken";
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as jwt from "jsonwebtoken";
 import initSqlJs from "sql.js";
 import * as vscode from "vscode";
-import { getErrorMessage, isNodeError, isParseError, logStructuredError } from "../interfaces/errors";
+import { logStructuredError } from "../interfaces/errors";
 import { log } from "../utils/logger";
 
 // use globalStorageUri to get the user directory path

@@ -143,7 +143,6 @@ export async function createMarkdownTooltip(
 
 						// Add weekday indication and daily remaining calculation (independent of progress bars)
 						if (periodInfo) {
-							const config = vscode.workspace.getConfiguration("cursorStats");
 							// Parse the end date from the period info
 							const [startDateStr, endDateStr] = periodInfo.split("-").map((d) => d.trim());
 							const currentYear = new Date().getFullYear();

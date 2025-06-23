@@ -1,7 +1,7 @@
-import axios from "axios";
-import * as jwt from "jsonwebtoken";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import axios from "axios";
+import * as jwt from "jsonwebtoken";
 import type * as vscode from "vscode";
 import { getErrorMessage, isApiError, isNodeError, isParseError } from "../interfaces/errors";
 import type { CursorUsageResponse, TeamInfo, TeamMemberInfo, TeamUsageResponse, UserCache } from "../interfaces/types";

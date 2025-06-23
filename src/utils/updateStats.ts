@@ -7,7 +7,7 @@ import {
 	getMaxLineWidth,
 	getStatusBarColor,
 } from "../handlers/statusBar";
-import { getErrorMessage, isApiError, isAuthError } from "../interfaces/errors";
+import { getErrorMessage, isApiError, isAuthError, logStructuredError } from "../interfaces/errors";
 import { checkUsageBasedStatus, fetchCursorStats } from "../services/api";
 import { getCursorTokenFromDB } from "../services/database";
 import {
@@ -21,7 +21,6 @@ import {
 import { convertAndFormatCurrency, getCurrentCurrency } from "./currency";
 import { t } from "./i18n";
 import { log } from "./logger";
-import { logStructuredError } from "../interfaces/errors";
 
 // Track unknown models to avoid repeated notifications
 let unknownModelNotificationShown = false;
