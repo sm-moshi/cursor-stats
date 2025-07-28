@@ -1,15 +1,20 @@
 // Place your settings in this file to overwrite default and user settings.
 {
+	"chat.editor.wordWrap": "on",
+	"editor.formatOnType": true,
 	"files.exclude": {
 		"out": false // set this to true to hide the "out" folder with the compiled JS files
 	},
-	"search.exclude": {
-		"out": true // set this to false to include "out" folder in search results
+	"sonarlint.analysisExcludesStandalone": "**/out/**,**/node_modules/**",
+	"sonarlint.connectedMode.project": {
+		"connectionId": "sm-moshi-org",
+		"projectKey": "sm-moshi_cursor-stats"
 	},
+	"sonarlint.disableTelemetry": true,
 	// Turn off tsc task auto detection since we have the necessary tasks as npm scripts
 	"typescript.tsc.autoDetect": "off",
+	"typescript.tsdk": "node_modules/typescript/lib",
+	"typescript.tsserver.experimental.enableProjectDiagnostics": true,
+	"typescript.updateImportsOnPaste.enabled": true,
+	"typescript.workspaceSymbols.scope": "currentProject"
 }
-
-	"eslint.format.enable": true,
-	"eslint.lintTask.enable": true,
-	"typescript.preferences.preferTypeOnlyAutoImports": true,

@@ -1,7 +1,8 @@
-out
-dist
-node_modules
+out/
+dist/
+node_modules/
 .vscode-test/
+.vscode/mise-tools/
 .DS_Store
 .env
 *.log 
@@ -12,3 +13,4 @@ user-cache.json
 currency-rates.json
 .cursorignore
 package-lock.json
+.venv/

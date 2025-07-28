@@ -4,8 +4,9 @@ node_modules
 .vscode-test/
 .DS_Store
 .env
-*.log 
+*.log
 .gitignore
 .git/
 package-lock.json
 LICENSE
+**/*.js.map
