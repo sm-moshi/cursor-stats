@@ -387,7 +387,7 @@
 		"jsonwebtoken": "^9.0.2",
 		"lru-cache": "^11.2.2",
 		"marked": "^17.0.0",
-		"semver": "^7.7.2",
+		"semver": "^7.7.3",
 		"sql.js": "^1.13.0"
 	},
 	"extensionKind": [
